@@ -8,10 +8,10 @@
  * público - veja o .gitignore).
  */
 
-define('DB_HOST', 'localhost');           // Normalmente é 'localhost' na Hostinger
-define('DB_NAME', 'u000000000_gestao');   // Nome do banco (prefixo u0000... vem da Hostinger)
-define('DB_USER', 'u000000000_usuario'); // Usuário do banco
-define('DB_PASS', 'SUA_SENHA_AQUI');      // Senha do banco
+define('DB_HOST', 'localhost');
+define('DB_NAME', 'u849479574_banco_toca');
+define('DB_USER', 'u849479574_rafael');
+define('DB_PASS', '?Bancotoca2026');
 
 function getConnection(): PDO {
     try {
