@@ -45,8 +45,13 @@ async function startServer() {
       router: appRouter,
       createContext,
       onError({ error, path }) {
-        console.error(`[tRPC] ${path ?? "<unknown>"}:`, error);
-        if (error.cause) console.error(`[tRPC] ${path ?? "<unknown>"} cause:`, error.cause);
+        let current: unknown = error;
+        let depth = 0;
+        while (current instanceof Error && depth < 5) {
+          console.error(`[tRPC] ${path ?? "<unknown>"} (depth ${depth}):`, current.message, (current as any).code ?? "");
+          current = current.cause;
+          depth++;
+        }
       },
     })
   );
