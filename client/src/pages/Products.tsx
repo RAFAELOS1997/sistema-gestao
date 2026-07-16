@@ -12,20 +12,26 @@ import { trpc } from "@/lib/trpc";
 import { Edit2, Package, Plus, Trash2, Eye, EyeOff } from "lucide-react";
 import { toast } from "sonner";
 
-const CATEGORIES = ["velas", "guias", "incensos", "banhos", "ervas"] as const;
+const CATEGORIES = ["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"] as const;
 const CATEGORY_LABELS: Record<string, string> = {
-  velas: "Velas",
   guias: "Guias",
-  incensos: "Incensos",
-  banhos: "Banhos",
-  ervas: "Ervas",
+  pulseiras: "Pulseiras",
+  velas: "Velas e Castiçais",
+  incensos: "Incensos e Defumadores",
+  ervas: "Ervas e Banhos",
+  imagens: "Imagens",
+  ferramentas: "Ferramentas e Metais",
+  vestuario: "Vestuário",
+  livros: "Livros e Tarô",
+  pedras: "Pedras e Cristais",
+  outros: "Outros",
 };
 
 type Category = typeof CATEGORIES[number];
 
 const emptyForm = {
   name: "",
-  category: "velas" as Category,
+  category: "outros" as Category,
   costPrice: "",
   salePrice: "",
   currentStock: "",

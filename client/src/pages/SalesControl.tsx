@@ -9,13 +9,19 @@ import { Download, TrendingUp, RefreshCw } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import React from "react";
 
-const CATEGORIES = ["velas", "guias", "incensos", "banhos", "ervas"] as const;
+const CATEGORIES = ["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"] as const;
 const CATEGORY_LABELS: Record<string, string> = {
-  velas: "Velas",
   guias: "Guias",
-  incensos: "Incensos",
-  banhos: "Banhos",
-  ervas: "Ervas",
+  pulseiras: "Pulseiras",
+  velas: "Velas e Castiçais",
+  incensos: "Incensos e Defumadores",
+  ervas: "Ervas e Banhos",
+  imagens: "Imagens",
+  ferramentas: "Ferramentas e Metais",
+  vestuario: "Vestuário",
+  livros: "Livros e Tarô",
+  pedras: "Pedras e Cristais",
+  outros: "Outros",
 };
 
 const COLORS = ["#d4af37", "#c9a227", "#bf9517", "#b58707", "#aa7a07"];

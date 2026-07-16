@@ -11,11 +11,17 @@ import { Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, ResponsiveContainer,
 const COLORS = ["#d4af37", "#b8960f", "#8b7500", "#6b5a00", "#4a3a00"];
 
 const CATEGORY_LABELS: Record<string, string> = {
-  velas: "Velas",
   guias: "Guias",
-  incensos: "Incensos",
-  banhos: "Banhos",
-  ervas: "Ervas",
+  pulseiras: "Pulseiras",
+  velas: "Velas e Castiçais",
+  incensos: "Incensos e Defumadores",
+  ervas: "Ervas e Banhos",
+  imagens: "Imagens",
+  ferramentas: "Ferramentas e Metais",
+  vestuario: "Vestuário",
+  livros: "Livros e Tarô",
+  pedras: "Pedras e Cristais",
+  outros: "Outros",
 };
 
 export default function Dashboard() {

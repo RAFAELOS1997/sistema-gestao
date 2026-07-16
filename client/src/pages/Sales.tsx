@@ -19,14 +19,20 @@ interface CartItem {
   total: number;
 }
 
-const CATEGORIES = ["velas", "guias", "incensos", "banhos", "ervas", "todos"] as const;
+const CATEGORIES = ["todos", "guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"] as const;
 const CATEGORY_LABELS: Record<string, string> = {
-  velas: "Velas",
-  guias: "Guias",
-  incensos: "Incensos",
-  banhos: "Banhos",
-  ervas: "Ervas",
   todos: "Todos",
+  guias: "Guias",
+  pulseiras: "Pulseiras",
+  velas: "Velas e Castiçais",
+  incensos: "Incensos e Defumadores",
+  ervas: "Ervas e Banhos",
+  imagens: "Imagens",
+  ferramentas: "Ferramentas e Metais",
+  vestuario: "Vestuário",
+  livros: "Livros e Tarô",
+  pedras: "Pedras e Cristais",
+  outros: "Outros",
 };
 
 export default function Sales() {

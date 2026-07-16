@@ -1,0 +1,1 @@
+ALTER TABLE `products` MODIFY COLUMN `category` enum('guias','pulseiras','velas','incensos','ervas','imagens','ferramentas','vestuario','livros','pedras','outros') NOT NULL;

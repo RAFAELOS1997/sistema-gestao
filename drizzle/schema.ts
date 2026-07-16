@@ -19,7 +19,7 @@ export type InsertUser = typeof users.$inferInsert;
 export const products = mysqlTable("products", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
-  category: mysqlEnum("category", ["velas", "guias", "incensos", "banhos", "ervas"]).notNull(),
+  category: mysqlEnum("category", ["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"]).notNull(),
   costPrice: int("costPrice").notNull(), // em centavos
   salePrice: int("salePrice").notNull(), // em centavos
   currentStock: int("currentStock").notNull().default(0),

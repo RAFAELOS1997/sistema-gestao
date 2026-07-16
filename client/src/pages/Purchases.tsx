@@ -13,13 +13,19 @@ import { Plus, Edit2, Trash2, ShoppingCart, FileUp, Search, Package, Truck, X, C
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
-const CATEGORIES = ["velas", "guias", "incensos", "banhos", "ervas"] as const;
+const CATEGORIES = ["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"] as const;
 const CATEGORY_LABELS: Record<string, string> = {
-  velas: "Velas",
   guias: "Guias",
-  incensos: "Incensos",
-  banhos: "Banhos",
-  ervas: "Ervas",
+  pulseiras: "Pulseiras",
+  velas: "Velas e Castiçais",
+  incensos: "Incensos e Defumadores",
+  ervas: "Ervas e Banhos",
+  imagens: "Imagens",
+  ferramentas: "Ferramentas e Metais",
+  vestuario: "Vestuário",
+  livros: "Livros e Tarô",
+  pedras: "Pedras e Cristais",
+  outros: "Outros",
 };
 
 interface PurchaseItem {
@@ -61,7 +67,7 @@ export default function Purchases() {
   // Novo Produto inline
   const [newProductForm, setNewProductForm] = useState({
     name: "",
-    category: "velas" as typeof CATEGORIES[number],
+    category: "outros" as typeof CATEGORIES[number],
     costPrice: "",
     salePrice: "",
     minimumStock: "5",
@@ -177,7 +183,7 @@ export default function Purchases() {
         salePrice: newProductForm.salePrice,
       },
     ]);
-    setNewProductForm({ name: "", category: "velas", costPrice: "", salePrice: "", minimumStock: "5" });
+    setNewProductForm({ name: "", category: "outros", costPrice: "", salePrice: "", minimumStock: "5" });
     setShowNewProduct(false);
     toast.success("Produto adicionado à compra");
   };

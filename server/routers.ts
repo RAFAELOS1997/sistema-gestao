@@ -61,7 +61,7 @@ const productsRouter = router({
     .input(
       z.object({
         name: z.string().min(1),
-        category: z.enum(["velas", "guias", "incensos", "banhos", "ervas"]),
+        category: z.enum(["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"]),
         costPrice: z.number().int().positive(),
         salePrice: z.number().int().positive(),
         currentStock: z.number().int().min(0),
@@ -76,7 +76,7 @@ const productsRouter = router({
       z.object({
         id: z.number().int().positive(),
         name: z.string().min(1).optional(),
-        category: z.enum(["velas", "guias", "incensos", "banhos", "ervas"]).optional(),
+        category: z.enum(["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"]).optional(),
         costPrice: z.number().int().positive().optional(),
         salePrice: z.number().int().positive().optional(),
         currentStock: z.number().int().min(0).optional(),
@@ -407,7 +407,7 @@ Se não conseguir determinar um campo, use null.`,
           z.object({
             productName: z.string(),
             existingProductId: z.number().nullable(),
-            category: z.enum(["velas", "guias", "incensos", "banhos", "ervas"]),
+            category: z.enum(["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"]),
             quantity: z.number().int().positive(),
             unitPriceCents: z.number().int().positive(),
             suggestedSalePriceCents: z.number().int().positive().nullable(),
