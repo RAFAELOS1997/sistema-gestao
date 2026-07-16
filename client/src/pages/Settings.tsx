@@ -16,7 +16,7 @@ export default function SettingsPage() {
   const [companyName, setCompanyName] = useState("Toca da Pantera");
   const [companyEmail, setCompanyEmail] = useState("");
   const [timezone, setTimezone] = useState("America/Sao_Paulo");
-  const [logoUrl, setLogoUrl] = useState("/manus-storage/344758_ed46c05b.jpg");
+  const [logoUrl, setLogoUrl] = useState("/logo.jpeg");
   const [isSaving, setIsSaving] = useState(false);
 
   const configQuery = trpc.settings.getConfig.useQuery();
@@ -33,7 +33,7 @@ export default function SettingsPage() {
       setPrimaryColor(data.primaryColor || "#d4af37");
       setSecondaryColor(data.secondaryColor || "#1a1a1a");
       setTimezone(data.timezone || "America/Sao_Paulo");
-      setLogoUrl(data.logoUrl || "/manus-storage/344758_ed46c05b.jpg");
+      setLogoUrl(data.logoUrl || "/logo.jpeg");
     }
   }, [configQuery.data]);
 
@@ -175,7 +175,7 @@ export default function SettingsPage() {
                     value={logoUrl}
                     onChange={(e) => setLogoUrl(e.target.value)}
                     className="bg-background border-border text-foreground"
-                    placeholder="/manus-storage/logo.jpg"
+                    placeholder="/logo.jpeg"
                   />
                   {logoUrl && (
                     <div className="mt-2">

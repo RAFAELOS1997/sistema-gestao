@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, Package, PanelLeft, ShoppingCart, Sparkles, ShoppingBag, BarChart3, Settings, Truck, Users as UsersIcon, Receipt, ClipboardCheck } from "lucide-react";
+import { LayoutDashboard, LogOut, Package, PanelLeft, ShoppingCart, ShoppingBag, BarChart3, Settings, Truck, Users as UsersIcon, Receipt, ClipboardCheck } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -37,7 +37,6 @@ const menuItems = [
   { icon: Receipt, label: "Recibos", path: "/receipts" },
   { icon: Truck, label: "Fornecedores", path: "/suppliers" },
   { icon: UsersIcon, label: "Usuários", path: "/users" },
-  { icon: Sparkles, label: "O Oráculo", path: "/oracle" },
   { icon: Settings, label: "Configurações", path: "/settings" },
 ];
 
@@ -64,7 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-4">
-            <div className="text-5xl">🐆</div>
+            <img src="/logo.jpeg" alt="Toca da Pantera" className="w-32 h-32 rounded-full object-cover border-2 border-accent/40" />
             <h1 className="text-2xl font-bold tracking-tight text-center text-foreground">
               Toca da Pantera
             </h1>
@@ -149,9 +148,9 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
               </button>
               {!isCollapsed && (
                 <div className="flex items-center gap-2 min-w-0">
-                  <img 
-                    src="/manus-storage/344758_ed46c05b.jpg" 
-                    alt="Toca da Pantera" 
+                  <img
+                    src="/logo.jpeg"
+                    alt="Toca da Pantera"
                     className="h-10 w-10 rounded-lg object-cover"
                   />
                   <span className="font-bold tracking-tight truncate text-accent text-sm">

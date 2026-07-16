@@ -143,7 +143,7 @@ export function ReceiptModal({
         <body>
           <div class="receipt">
             <div class="logo">
-              <img src="/manus-storage/344758_ed46c05b_90c36b27.jpg" style="max-width: 100%; height: auto;">
+              <img src="/logo.jpeg" style="max-width: 100%; height: auto;">
             </div>
             <div class="header">
               <h1>TOCA DA PANTERA</h1>
@@ -265,7 +265,7 @@ export function ReceiptModal({
           {/* Logo */}
           <div className="flex justify-center">
             <img
-              src="/manus-storage/344758_ed46c05b_90c36b27.jpg"
+              src="/logo.jpeg"
               alt="Logo Toca da Pantera"
               className="w-28 h-28 object-contain"
             />

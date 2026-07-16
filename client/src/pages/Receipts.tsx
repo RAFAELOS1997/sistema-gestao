@@ -91,7 +91,7 @@ export default function Receipts() {
         <body>
           <div class="receipt">
             <div class="header">
-              <img src="/manus-storage/344758_ed46c05b_90c36b27.jpg" style="max-width: 120px; height: auto; margin-bottom: 10px;">
+              <img src="/logo.jpeg" style="max-width: 120px; height: auto; margin-bottom: 10px;">
               <h1>TOCA DA PANTERA</h1>
               <p>Artigos Religiosos, Esotéricos e Místicos</p>
               <p>Recibo #${formatReceiptNumber(receipt.receiptNumber)}</p>
