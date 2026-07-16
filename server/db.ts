@@ -56,6 +56,13 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+export async function getUserByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
 // ─── Products ─────────────────────────────────────────────────────────────────
 
 export async function listProducts(includeInactive = false) {
@@ -435,12 +442,16 @@ export async function createLocalUser(data: {
   name: string;
   email: string;
   role?: "user" | "admin";
+  passwordHash?: string;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  
+
+  const existing = await getUserByEmail(data.email);
+  if (existing) throw new Error("Já existe um usuário com esse email");
+
   const openId = `local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-  
+
   return await db
     .insert(users)
     .values({
@@ -449,6 +460,7 @@ export async function createLocalUser(data: {
       email: data.email,
       loginMethod: "local",
       role: data.role || "user",
+      passwordHash: data.passwordHash,
     });
 }
 

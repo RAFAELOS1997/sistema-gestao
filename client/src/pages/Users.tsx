@@ -13,7 +13,7 @@ import { trpc } from "@/lib/trpc";
 export function Users() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [formData, setFormData] = useState({ name: "", email: "", role: "user" as const });
+  const [formData, setFormData] = useState({ name: "", email: "", password: "", role: "user" as const });
 
   const utils = trpc.useUtils();
   const { data: users = [], isLoading } = trpc.users.list.useQuery();
@@ -21,7 +21,7 @@ export function Users() {
   const createMutation = trpc.users.create.useMutation({
     onSuccess: () => {
       toast.success("Usuário criado com sucesso!");
-      setFormData({ name: "", email: "", role: "user" });
+      setFormData({ name: "", email: "", password: "", role: "user" });
       setIsDialogOpen(false);
       utils.users.list.invalidate();
     },
@@ -33,7 +33,7 @@ export function Users() {
   const updateMutation = trpc.users.update.useMutation({
     onSuccess: () => {
       toast.success("Usuário atualizado com sucesso!");
-      setFormData({ name: "", email: "", role: "user" });
+      setFormData({ name: "", email: "", password: "", role: "user" });
       setEditingId(null);
       setIsDialogOpen(false);
       utils.users.list.invalidate();
@@ -62,15 +62,19 @@ export function Users() {
     }
 
     if (editingId) {
-      updateMutation.mutate({ id: editingId, ...formData });
+      updateMutation.mutate({ id: editingId, name: formData.name, email: formData.email, role: formData.role });
     } else {
+      if (!formData.password || formData.password.length < 6) {
+        toast.error("Senha deve ter ao menos 6 caracteres");
+        return;
+      }
       createMutation.mutate(formData);
     }
   };
 
   const handleEdit = (user: any) => {
     setEditingId(user.id);
-    setFormData({ name: user.name || "", email: user.email || "", role: user.role });
+    setFormData({ name: user.name || "", email: user.email || "", password: "", role: user.role });
     setIsDialogOpen(true);
   };
 
@@ -83,7 +87,7 @@ export function Users() {
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingId(null);
-    setFormData({ name: "", email: "", role: "user" });
+    setFormData({ name: "", email: "", password: "", role: "user" });
   };
 
   return (
@@ -127,6 +131,18 @@ export function Users() {
                   placeholder="email@example.com"
                 />
               </div>
+              {!editingId && (
+                <div>
+                  <Label htmlFor="password">Senha</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    placeholder="Mínimo 6 caracteres"
+                  />
+                </div>
+              )}
               <div>
                 <Label htmlFor="role">Função</Label>
                 <Select value={formData.role} onValueChange={(value: any) => setFormData({ ...formData, role: value })}>

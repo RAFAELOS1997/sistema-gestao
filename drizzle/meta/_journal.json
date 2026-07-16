@@ -50,6 +50,13 @@
       "when": 1783091084590,
       "tag": "0006_jittery_marvel_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1784220262593,
+      "tag": "0007_lucky_proudstar",
+      "breakpoints": true
     }
   ]
 }

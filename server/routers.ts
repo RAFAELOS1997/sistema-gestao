@@ -1,7 +1,10 @@
-import { COOKIE_NAME } from "@shared/const";
+import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
+import { hashPassword, verifyPassword } from "./_core/password";
+import { sdk } from "./_core/sdk";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
@@ -40,6 +43,7 @@ import {
   deleteProductSupplier,
   listUsers,
   getUserById,
+  getUserByEmail,
   createLocalUser,
   updateUser,
   deleteUser,
@@ -810,23 +814,28 @@ const suppliersRouter = router({
 // ─── Users Router ────────────────────────────────────────────────────────────
 
 const usersRouter = router({
-  list: publicProcedure.query(() => listUsers()),
-  
-  getById: publicProcedure
+  list: protectedProcedure.query(() => listUsers()),
+
+  getById: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .query(({ input }) => getUserById(input.id)),
-  
-  create: publicProcedure
+
+  create: protectedProcedure
     .input(
       z.object({
         name: z.string().min(1, "Nome é obrigatório"),
         email: z.string().email("Email inválido"),
+        password: z.string().min(6, "Senha deve ter ao menos 6 caracteres"),
         role: z.enum(["user", "admin"]).optional(),
       })
     )
-    .mutation(({ input }) => createLocalUser(input)),
-  
-  update: publicProcedure
+    .mutation(async ({ input }) => {
+      const { password, ...rest } = input;
+      const passwordHash = await hashPassword(password);
+      return createLocalUser({ ...rest, passwordHash });
+    }),
+
+  update: protectedProcedure
     .input(
       z.object({
         id: z.number().int().positive(),
@@ -839,8 +848,8 @@ const usersRouter = router({
       const { id, ...data } = input;
       return updateUser(id, data);
     }),
-  
-  delete: publicProcedure
+
+  delete: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(({ input }) => deleteUser(input.id)),
 });
@@ -886,6 +895,61 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query((opts) => opts.ctx.user),
+    needsSetup: publicProcedure.query(async () => {
+      const existing = await listUsers();
+      return existing.length === 0;
+    }),
+    setup: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(1, "Nome é obrigatório"),
+          email: z.string().email("Email inválido"),
+          password: z.string().min(6, "Senha deve ter ao menos 6 caracteres"),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const existing = await listUsers();
+        if (existing.length > 0) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Configuração inicial já foi concluída" });
+        }
+
+        const passwordHash = await hashPassword(input.password);
+        await createLocalUser({ name: input.name, email: input.email, role: "admin", passwordHash });
+        const user = await getUserByEmail(input.email);
+        if (!user) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao criar administrador" });
+
+        const sessionToken = await sdk.signSession(
+          { openId: user.openId, appId: process.env.VITE_APP_ID ?? "sistema-gestao", name: user.name ?? "" },
+          { expiresInMs: ONE_YEAR_MS }
+        );
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+
+        return { success: true, user } as const;
+      }),
+    login: publicProcedure
+      .input(
+        z.object({
+          email: z.string().email("Email inválido"),
+          password: z.string().min(1, "Senha é obrigatória"),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const user = await getUserByEmail(input.email);
+        if (!user || !user.passwordHash || !(await verifyPassword(input.password, user.passwordHash))) {
+          throw new TRPCError({ code: "UNAUTHORIZED", message: "Email ou senha inválidos" });
+        }
+
+        const sessionToken = await sdk.signSession(
+          { openId: user.openId, appId: process.env.VITE_APP_ID ?? "sistema-gestao", name: user.name ?? "" },
+          { expiresInMs: ONE_YEAR_MS }
+        );
+
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+
+        return { success: true, user } as const;
+      }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });

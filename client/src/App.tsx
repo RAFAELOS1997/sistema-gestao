@@ -7,6 +7,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
+import Login from "./pages/Login";
 import OracleConsultation from "./pages/OracleConsultation";
 import Products from "./pages/Products";
 import Purchases from "./pages/Purchases";
@@ -21,6 +22,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/login" component={Login} />
       <Route path="/dashboard">
         <DashboardLayout>
           <Dashboard />
