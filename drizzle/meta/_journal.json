@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1782404395764,
+      "tag": "0000_free_genesis",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1782404471585,
+      "tag": "0001_broken_nick_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1782486230760,
+      "tag": "0002_loving_gideon",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1782501365753,
+      "tag": "0003_cool_silver_samurai",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1782502431759,
+      "tag": "0004_fresh_rocket_raccoon",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1782832875308,
+      "tag": "0005_free_ulik",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1783091084590,
+      "tag": "0006_jittery_marvel_boy",
+      "breakpoints": true
+    }
+  ]
+}
