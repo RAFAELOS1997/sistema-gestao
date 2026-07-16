@@ -9,6 +9,7 @@ import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import OracleConsultation from "./pages/OracleConsultation";
+import PriceReview from "./pages/PriceReview";
 import Products from "./pages/Products";
 import Purchases from "./pages/Purchases";
 import Sales from "./pages/Sales";
@@ -31,6 +32,11 @@ function Router() {
       <Route path="/products">
         <DashboardLayout>
           <Products />
+        </DashboardLayout>
+      </Route>
+      <Route path="/price-review">
+        <DashboardLayout>
+          <PriceReview />
         </DashboardLayout>
       </Route>
       <Route path="/purchases">

@@ -219,7 +219,7 @@ const resolveApiUrl = () =>
 
 const assertApiKey = () => {
   if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+    throw new Error("Recurso de IA não está configurado neste sistema. Cadastre o produto manualmente.");
   }
 };
 

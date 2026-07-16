@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, Package, PanelLeft, ShoppingCart, Sparkles, ShoppingBag, BarChart3, Settings, Truck, Users as UsersIcon, Receipt } from "lucide-react";
+import { LayoutDashboard, LogOut, Package, PanelLeft, ShoppingCart, Sparkles, ShoppingBag, BarChart3, Settings, Truck, Users as UsersIcon, Receipt, ClipboardCheck } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -30,6 +30,7 @@ import { Button } from "./ui/button";
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
   { icon: Package, label: "Gestão de Produtos", path: "/products" },
+  { icon: ClipboardCheck, label: "Revisão de Preços", path: "/price-review" },
   { icon: ShoppingBag, label: "Compras", path: "/purchases" },
   { icon: ShoppingCart, label: "Vendas", path: "/sales" },
   { icon: BarChart3, label: "Controle de Vendas", path: "/sales-control" },
