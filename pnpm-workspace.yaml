@@ -8,5 +8,5 @@ overrides:
   tailwindcss>nanoid: 3.3.7
 
 allowBuilds:
-  esbuild: true
+  esbuild: false
   "@tailwindcss/oxide": true
