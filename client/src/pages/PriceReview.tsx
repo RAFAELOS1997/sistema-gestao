@@ -237,7 +237,7 @@ export default function PriceReview() {
                             className="bg-background border-border text-foreground w-28 ml-auto text-right"
                           />
                         </TableCell>
-                        <TableCell className="text-right text-accent font-bold">{margin}% [DBG ev={String(editedValue)} cs={currentSaleCents} cp={product.costPrice}]</TableCell>
+                        <TableCell className="text-right text-accent font-bold">{margin}%</TableCell>
                         <TableCell className="text-right">
                           <Button
                             size="sm"
