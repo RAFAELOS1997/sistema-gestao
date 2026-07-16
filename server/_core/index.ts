@@ -46,6 +46,7 @@ async function startServer() {
       createContext,
       onError({ error, path }) {
         console.error(`[tRPC] ${path ?? "<unknown>"}:`, error);
+        if (error.cause) console.error(`[tRPC] ${path ?? "<unknown>"} cause:`, error.cause);
       },
     })
   );
