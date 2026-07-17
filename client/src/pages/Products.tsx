@@ -401,11 +401,11 @@ export default function Products() {
             {imageSuggestions
               .filter((s) => !dismissedSuggestions.has(s.productId))
               .map((s) => (
-                <div key={s.productId} className="flex items-center gap-3 p-2 bg-background rounded-lg border border-border">
+                <div key={s.productId} className="flex items-start gap-3 p-2 bg-background rounded-lg border border-border">
                   <ZoomableImage src={s.imageUrl} alt={s.catalogName} className="w-12 h-12 rounded border border-border shrink-0" />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm text-foreground font-medium truncate">{s.productName}</p>
-                    <p className="text-xs text-muted-foreground truncate">Parecido com: {s.catalogName}</p>
+                    <p className="text-sm text-foreground font-medium">{s.productName}</p>
+                    <p className="text-xs text-muted-foreground">Parecido com: {s.catalogName}</p>
                   </div>
                   <Button
                     size="sm"

@@ -363,7 +363,7 @@ export default function Sales() {
                     </div>
                   )}
                 </div>
-                <h3 className="font-semibold text-sm text-foreground truncate">{product.name}</h3>
+                <h3 className="font-semibold text-sm text-foreground leading-snug min-h-[2.5rem]">{product.name}</h3>
                 <p className={`text-xs mt-0.5 ${outOfStock ? "text-destructive" : "text-muted-foreground"}`}>
                   Estoque: {product.currentStock}
                 </p>
@@ -407,7 +407,7 @@ export default function Sales() {
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-sm text-foreground truncate">{product.name}</h3>
+                  <h3 className="font-semibold text-sm text-foreground leading-snug">{product.name}</h3>
                   <p className={`text-xs ${outOfStock ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                     {outOfStock ? "Sem estoque" : `Estoque: ${product.currentStock}`}
                   </p>
@@ -497,7 +497,7 @@ export default function Sales() {
                   {cart.map((item) => (
                     <div key={item.productId} className="p-2 bg-background rounded border border-border">
                       <div className="flex justify-between items-start mb-2">
-                        <p className="text-sm font-medium text-foreground truncate flex-1">{item.name}</p>
+                        <p className="text-sm font-medium text-foreground flex-1">{item.name}</p>
                         <button
                           onClick={() => removeFromCart(item.productId)}
                           className="text-muted-foreground hover:text-destructive transition-colors"
