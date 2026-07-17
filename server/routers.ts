@@ -61,7 +61,9 @@ import {
 // ─── Products Router ──────────────────────────────────────────────────────────
 
 const productsRouter = router({
-  list: protectedProcedure.query(() => listProducts()),
+  list: protectedProcedure
+    .input(z.object({ includeInactive: z.boolean().optional() }).optional())
+    .query(({ input }) => listProducts(input?.includeInactive ?? false)),
 
   create: protectedProcedure
     .input(

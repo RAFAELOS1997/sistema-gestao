@@ -9,7 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { Edit2, Package, Plus, Trash2, Eye, EyeOff } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Edit2, Package, Plus, Trash2, Eye, EyeOff, Search } from "lucide-react";
+import { useMemo } from "react";
 import { toast } from "sonner";
 
 const CATEGORIES = ["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"] as const;
@@ -44,9 +46,11 @@ export default function Products() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState(emptyForm);
   const [showInactive, setShowInactive] = useState(false);
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("todas");
 
   const utils = trpc.useUtils();
-  const { data: products, isLoading } = trpc.products.list.useQuery();
+  const { data: products, isLoading } = trpc.products.list.useQuery({ includeInactive: showInactive });
   const createMutation = trpc.products.create.useMutation({
     onSuccess: () => { utils.products.list.invalidate(); utils.analytics.dashboard.invalidate(); utils.analytics.byCategory.invalidate(); },
   });
@@ -146,6 +150,18 @@ export default function Products() {
       toast.error(error?.message ?? "Erro ao salvar produto");
     }
   };
+
+  const filteredProducts = useMemo(() => {
+    let list = products ?? [];
+    if (search.trim()) {
+      const term = search.trim().toLowerCase();
+      list = list.filter((p) => p.name.toLowerCase().includes(term));
+    }
+    if (categoryFilter !== "todas") {
+      list = list.filter((p) => p.category === categoryFilter);
+    }
+    return list;
+  }, [products, search, categoryFilter]);
 
   if (isLoading) {
     return (
@@ -280,24 +296,157 @@ export default function Products() {
       </div>
 
       <Card className="bg-card border-border">
+        <CardContent className="p-4 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar produto..."
+              className="bg-background border-border text-foreground pl-9 h-11"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+              <SelectTrigger className="bg-background border-border text-foreground h-10 w-full sm:w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                <SelectItem value="todas">Todas as categorias</SelectItem>
+                {CATEGORIES.map((cat) => (
+                  <SelectItem key={cat} value={cat}>{CATEGORY_LABELS[cat]}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={showInactive}
+                onCheckedChange={setShowInactive}
+                className="data-[state=checked]:bg-accent"
+              />
+              <span className="text-sm text-muted-foreground">Mostrar inativos</span>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="text-foreground flex items-center gap-2">
             <Package className="h-5 w-5 text-accent" />
             Produtos Cadastrados
           </CardTitle>
-          <CardDescription>Total: {products?.length ?? 0} produto(s)</CardDescription>
+          <CardDescription>
+            {filteredProducts.length === (products?.length ?? 0)
+              ? `Total: ${products?.length ?? 0} produto(s)`
+              : `${filteredProducts.length} de ${products?.length ?? 0} produto(s)`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          {products?.length === 0 ? (
+          {filteredProducts.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground gap-3">
               <Package className="h-12 w-12 opacity-30" />
-              <p>Nenhum produto cadastrado ainda.</p>
-              <Button variant="outline" onClick={openCreate} className="border-accent/30 text-accent hover:bg-accent/10">
-                Cadastrar primeiro produto
-              </Button>
+              {(products?.length ?? 0) === 0 ? (
+                <>
+                  <p>Nenhum produto cadastrado ainda.</p>
+                  <Button variant="outline" onClick={openCreate} className="border-accent/30 text-accent hover:bg-accent/10">
+                    Cadastrar primeiro produto
+                  </Button>
+                </>
+              ) : (
+                <p>Nenhum produto encontrado com esses filtros.</p>
+              )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Lista em cards no celular */}
+            <div className="md:hidden space-y-3">
+              {filteredProducts.map((product) => {
+                const margin = product.salePrice > 0
+                  ? Math.round(((product.salePrice - product.costPrice) / product.salePrice) * 100)
+                  : 0;
+                const lowStock = product.currentStock <= product.minimumStock;
+                return (
+                  <div key={product.id} className="p-3 bg-background rounded-lg border border-border space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium text-foreground text-sm leading-snug">{product.name}</p>
+                      <Badge variant={product.isActive === 1 ? "default" : "secondary"} className={`shrink-0 text-[10px] ${product.isActive === 1 ? "bg-green-900/40 text-green-400 border-green-700" : "bg-red-900/40 text-red-400 border-red-700"}`}>
+                        {product.isActive === 1 ? "Ativo" : "Inativo"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <Badge variant="outline" className="border-accent/40 text-accent text-[10px]">
+                        {CATEGORY_LABELS[product.category]}
+                      </Badge>
+                      <span className={`text-xs font-semibold ${lowStock ? "text-destructive" : "text-muted-foreground"}`}>
+                        Estoque: {product.currentStock}{lowStock && " ⚠️"}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Custo</p>
+                        <p className="text-muted-foreground">R$ {(product.costPrice / 100).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Venda</p>
+                        <p className="text-foreground font-medium">R$ {(product.salePrice / 100).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground">Margem</p>
+                        <p className="text-accent font-bold">{margin}%</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1 border-t border-border">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => openEdit(product)}
+                        className="flex-1 h-9 border-accent/30 text-accent hover:bg-accent/10"
+                      >
+                        <Edit2 className="w-3.5 h-3.5 mr-1" />
+                        Editar
+                      </Button>
+                      {product.isActive === 1 ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleDeactivate(product.id, product.name)}
+                          disabled={deactivateMutation.isPending}
+                          className="h-9 w-9 p-0 border-border text-muted-foreground"
+                          title="Desativar produto"
+                        >
+                          <EyeOff className="w-3.5 h-3.5" />
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleReactivate(product.id, product.name)}
+                          disabled={reactivateMutation.isPending}
+                          className="h-9 w-9 p-0 border-border text-green-400"
+                          title="Reativar produto"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleDelete(product.id, product.name)}
+                        disabled={deleteMutation.isPending}
+                        className="h-9 w-9 p-0 border-border text-red-400"
+                        title="Excluir produto"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tabela no computador */}
+            <div className="overflow-x-auto hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
@@ -312,7 +461,7 @@ export default function Products() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {products?.map((product) => {
+                  {filteredProducts.map((product) => {
                     const margin = product.salePrice > 0
                       ? Math.round(((product.salePrice - product.costPrice) / product.salePrice) * 100)
                       : 0;
@@ -391,6 +540,7 @@ export default function Products() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>
