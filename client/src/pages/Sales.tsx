@@ -16,6 +16,8 @@ interface CartItem {
   name: string;
   quantity: number;
   unitPrice: number;
+  listPrice: number; // preço de tabela, para mostrar quando o preço foi negociado
+  priceInput: string; // texto digitado no campo de preço (evita o campo "brigar" com a digitação)
   total: number;
 }
 
@@ -40,8 +42,10 @@ export default function Sales() {
   const [searchTerm, setSearchTerm] = React.useState("");
   const [selectedCategory, setSelectedCategory] = React.useState<string>("todos");
   const [hideOutOfStock, setHideOutOfStock] = React.useState(true);
-  const [discountPercent, setDiscountPercent] = React.useState("0");
+  const [discountValue, setDiscountValue] = React.useState("0");
+  const [discountMode, setDiscountMode] = React.useState<"percent" | "reais">("percent");
   const [paymentMethod, setPaymentMethod] = React.useState("dinheiro");
+  const [receivedAmount, setReceivedAmount] = React.useState("");
   const [channel, setChannel] = React.useState<"fisico" | "instagram">("fisico");
   const [notes, setNotes] = React.useState("");
   const [showReceipt, setShowReceipt] = React.useState(false);
@@ -73,10 +77,17 @@ export default function Sales() {
   // Calcular totais do carrinho
   const cartTotals = React.useMemo(() => {
     const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
-    const discount = Math.round(subtotal * (parseFloat(discountPercent) / 100));
+    const raw = parseFloat(discountValue.replace(",", ".")) || 0;
+    const discount = discountMode === "percent"
+      ? Math.round(subtotal * (raw / 100))
+      : Math.min(Math.round(raw * 100), subtotal);
     const total = subtotal - discount;
     return { subtotal, discount, total };
-  }, [cart, discountPercent]);
+  }, [cart, discountValue, discountMode]);
+
+  // Troco (pagamento em dinheiro)
+  const receivedCents = Math.round((parseFloat(receivedAmount.replace(",", ".")) || 0) * 100);
+  const changeCents = receivedCents - cartTotals.total;
 
   // Adicionar produto ao carrinho
   const addToCart = (product: any) => {
@@ -113,6 +124,8 @@ export default function Sales() {
           name: product.name,
           quantity: 1,
           unitPrice: product.salePrice,
+          listPrice: product.salePrice,
+          priceInput: (product.salePrice / 100).toFixed(2),
           total: product.salePrice,
         },
       ];
@@ -147,6 +160,18 @@ export default function Sales() {
     );
   };
 
+  // Alterar preço unitário (preço negociado no balcão)
+  const updateUnitPrice = (productId: number, priceReais: string) => {
+    const cents = Math.round((parseFloat(priceReais.replace(",", ".")) || 0) * 100);
+    setCart((prev) =>
+      prev.map((item) =>
+        item.productId === productId
+          ? { ...item, priceInput: priceReais, unitPrice: cents, total: cents * item.quantity }
+          : item
+      )
+    );
+  };
+
   // Remover do carrinho
   const removeFromCart = (productId: number) => {
     setCart((prev) => prev.filter((item) => item.productId !== productId));
@@ -156,6 +181,10 @@ export default function Sales() {
   const handleFinalizeSale = async () => {
     if (cart.length === 0) {
       toast.error("Carrinho vazio");
+      return;
+    }
+    if (cart.some((item) => item.unitPrice <= 0)) {
+      toast.error("Tem item com preço zerado no carrinho. Ajuste o preço antes de finalizar.");
       return;
     }
 
@@ -171,9 +200,7 @@ export default function Sales() {
         });
       }
 
-      const subtotal = cart.reduce((sum, item) => sum + item.total, 0);
-      const discount = Math.round(subtotal * (parseFloat(discountPercent) / 100));
-      const total = subtotal - discount;
+      const { subtotal, discount, total } = cartTotals;
 
       // Criar recibo no banco com numeração sequencial
       const receiptResult = await createReceiptMutation.mutateAsync({
@@ -201,8 +228,10 @@ export default function Sales() {
       });
 
       setCart([]);
-      setDiscountPercent("0");
+      setDiscountValue("0");
+      setDiscountMode("percent");
       setPaymentMethod("dinheiro");
+      setReceivedAmount("");
       setChannel("fisico");
       setNotes("");
       setShowReceipt(true);
@@ -330,8 +359,8 @@ export default function Sales() {
                           <X className="w-4 h-4" />
                         </button>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                             className="p-1 hover:bg-accent/20 rounded transition-colors"
@@ -346,6 +375,25 @@ export default function Sales() {
                             <Plus className="w-3 h-3 text-accent" />
                           </button>
                         </div>
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="text-xs text-muted-foreground shrink-0">R$</span>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.priceInput}
+                            onChange={(e) => updateUnitPrice(item.productId, e.target.value)}
+                            className="h-7 w-20 px-1.5 text-sm text-right bg-card border-border text-foreground"
+                            title="Preço unitário (dá pra ajustar se negociou)"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between mt-1">
+                        {item.unitPrice !== item.listPrice ? (
+                          <span className="text-[10px] text-muted-foreground line-through">
+                            tabela R$ {(item.listPrice / 100).toFixed(2)}
+                          </span>
+                        ) : <span />}
                         <p className="text-sm font-semibold text-accent">R$ {(item.total / 100).toFixed(2)}</p>
                       </div>
                     </div>
@@ -359,18 +407,35 @@ export default function Sales() {
               {cart.length > 0 && (
                 <div className="pt-2 border-t border-border">
                   <Label htmlFor="discount" className="text-foreground text-xs">
-                    Desconto (%)
+                    Desconto
                   </Label>
-                  <Input
-                    id="discount"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.5"
-                    value={discountPercent}
-                    onChange={(e) => setDiscountPercent(e.target.value)}
-                    className="mt-1 bg-background border-border text-foreground text-sm"
-                  />
+                  <div className="flex gap-1.5 mt-1">
+                    <Input
+                      id="discount"
+                      type="number"
+                      min="0"
+                      step={discountMode === "percent" ? "0.5" : "0.01"}
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(e.target.value)}
+                      className="bg-background border-border text-foreground text-sm"
+                    />
+                    <div className="flex rounded-md border border-border overflow-hidden shrink-0">
+                      <button
+                        type="button"
+                        onClick={() => setDiscountMode("percent")}
+                        className={`px-2.5 text-sm font-semibold transition-colors ${discountMode === "percent" ? "bg-accent text-accent-foreground" : "bg-background text-muted-foreground"}`}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setDiscountMode("reais")}
+                        className={`px-2 text-sm font-semibold transition-colors ${discountMode === "reais" ? "bg-accent text-accent-foreground" : "bg-background text-muted-foreground"}`}
+                      >
+                        R$
+                      </button>
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -419,17 +484,46 @@ export default function Sales() {
                       <SelectItem value="dinheiro" className="text-foreground">
                         Dinheiro
                       </SelectItem>
-                      <SelectItem value="cartao" className="text-foreground">
-                        Cartão
-                      </SelectItem>
                       <SelectItem value="pix" className="text-foreground">
                         PIX
+                      </SelectItem>
+                      <SelectItem value="debito" className="text-foreground">
+                        Cartão de Débito
+                      </SelectItem>
+                      <SelectItem value="credito" className="text-foreground">
+                        Cartão de Crédito
                       </SelectItem>
                       <SelectItem value="cheque" className="text-foreground">
                         Cheque
                       </SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              )}
+
+              {/* Troco (dinheiro) */}
+              {cart.length > 0 && paymentMethod === "dinheiro" && (
+                <div className="pt-2 border-t border-border">
+                  <Label htmlFor="received" className="text-foreground text-xs">
+                    Valor Recebido (R$)
+                  </Label>
+                  <Input
+                    id="received"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder={`Total: ${(cartTotals.total / 100).toFixed(2)}`}
+                    value={receivedAmount}
+                    onChange={(e) => setReceivedAmount(e.target.value)}
+                    className="mt-1 bg-background border-border text-foreground text-sm"
+                  />
+                  {receivedAmount !== "" && (
+                    <p className={`mt-1.5 text-sm font-bold ${changeCents >= 0 ? "text-green-400" : "text-destructive"}`}>
+                      {changeCents >= 0
+                        ? `Troco: R$ ${(changeCents / 100).toFixed(2)}`
+                        : `Falta: R$ ${(Math.abs(changeCents) / 100).toFixed(2)}`}
+                    </p>
+                  )}
                 </div>
               )}
 
