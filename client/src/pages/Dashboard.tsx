@@ -34,6 +34,11 @@ export default function Dashboard() {
 
   const { data: dashboardData, isLoading } = trpc.analytics.dashboard.useQuery({ startDate, endDate });
   const { data: categoryData } = trpc.analytics.byCategory.useQuery({ startDate, endDate });
+  const { data: products } = trpc.products.list.useQuery();
+
+  const lowStockProducts = (products ?? [])
+    .filter((p) => p.currentStock <= p.minimumStock)
+    .sort((a, b) => (a.currentStock - a.minimumStock) - (b.currentStock - b.minimumStock));
 
   if (isLoading) {
     return (
@@ -119,11 +124,26 @@ export default function Dashboard() {
       </div>
 
       {/* Alerta de estoque baixo */}
-      {(dashboardData?.lowStockAlerts ?? 0) > 0 && (
+      {lowStockProducts.length > 0 && (
         <Alert className="border-destructive/50 bg-destructive/10">
           <AlertTriangle className="h-4 w-4 text-destructive" />
-          <AlertDescription className="text-foreground">
-            <strong>{dashboardData?.lowStockAlerts} produto(s)</strong> com estoque baixo. Considere fazer reposição.
+          <AlertDescription className="text-foreground w-full">
+            <strong>{lowStockProducts.length} produto(s)</strong> com estoque baixo. Considere fazer reposição:
+            <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-1">
+              {lowStockProducts.slice(0, 9).map((p) => (
+                <div key={p.id} className="flex items-baseline justify-between gap-2 text-sm">
+                  <span className="truncate">{p.name}</span>
+                  <span className={`shrink-0 font-semibold ${p.currentStock === 0 ? "text-destructive" : "text-yellow-500"}`}>
+                    {p.currentStock === 0 ? "zerado" : `${p.currentStock} de ${p.minimumStock}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+            {lowStockProducts.length > 9 && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                …e mais {lowStockProducts.length - 9} produto(s). Veja todos em Gestão de Produtos.
+              </p>
+            )}
           </AlertDescription>
         </Alert>
       )}

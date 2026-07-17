@@ -42,6 +42,7 @@ export default function Sales() {
   const [hideOutOfStock, setHideOutOfStock] = React.useState(true);
   const [discountPercent, setDiscountPercent] = React.useState("0");
   const [paymentMethod, setPaymentMethod] = React.useState("dinheiro");
+  const [channel, setChannel] = React.useState<"fisico" | "instagram">("fisico");
   const [notes, setNotes] = React.useState("");
   const [showReceipt, setShowReceipt] = React.useState(false);
   const [lastSaleData, setLastSaleData] = React.useState<{
@@ -165,7 +166,7 @@ export default function Sales() {
           productId: item.productId,
           quantity: item.quantity,
           unitPrice: item.unitPrice,
-          channel: "fisico",
+          channel,
           saleDate: new Date(),
         });
       }
@@ -202,6 +203,7 @@ export default function Sales() {
       setCart([]);
       setDiscountPercent("0");
       setPaymentMethod("dinheiro");
+      setChannel("fisico");
       setNotes("");
       setShowReceipt(true);
       toast.success("Venda finalizada com sucesso!");
@@ -211,7 +213,7 @@ export default function Sales() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-24 lg:pb-0">
       {/* Header */}
       <div>
         <div className="flex items-center gap-3 mb-2">
@@ -228,8 +230,8 @@ export default function Sales() {
         {/* Products Section */}
         <div className="lg:col-span-3 space-y-4">
           {/* Search and Filter */}
-          <div className="flex gap-3 items-center">
-            <div className="flex-1 relative">
+          <div className="flex flex-wrap gap-3 items-center">
+            <div className="flex-1 relative min-w-[180px]">
               <Search className="absolute left-3 top-3 w-4 h-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar produto..."
@@ -308,7 +310,7 @@ export default function Sales() {
 
         {/* Cart Sidebar */}
         <div className="lg:col-span-1">
-          <Card className="border border-border bg-card sticky top-6">
+          <Card id="cart-card" className="border border-border bg-card sticky top-6 scroll-mt-20">
             <CardHeader className="pb-3">
               <CardTitle className="text-foreground">Carrinho</CardTitle>
               <CardDescription className="text-muted-foreground">{cart.length} item(ns)</CardDescription>
@@ -369,6 +371,37 @@ export default function Sales() {
                     onChange={(e) => setDiscountPercent(e.target.value)}
                     className="mt-1 bg-background border-border text-foreground text-sm"
                   />
+                </div>
+              )}
+
+              {/* Canal da venda */}
+              {cart.length > 0 && (
+                <div className="pt-2 border-t border-border">
+                  <Label className="text-foreground text-xs">Canal da Venda</Label>
+                  <div className="grid grid-cols-2 gap-2 mt-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={channel === "fisico" ? "default" : "outline"}
+                      className={channel === "fisico"
+                        ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                        : "border-border text-muted-foreground"}
+                      onClick={() => setChannel("fisico")}
+                    >
+                      Loja Física
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={channel === "instagram" ? "default" : "outline"}
+                      className={channel === "instagram"
+                        ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                        : "border-border text-muted-foreground"}
+                      onClick={() => setChannel("instagram")}
+                    >
+                      Instagram
+                    </Button>
+                  </div>
                 </div>
               )}
 
@@ -449,6 +482,26 @@ export default function Sales() {
           </Card>
         </div>
       </div>
+
+      {/* Barra fixa do carrinho no celular */}
+      {cart.length > 0 && (
+        <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-card border-t border-border px-4 py-3 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">{cart.length} item(ns) no carrinho</p>
+            <p className="text-lg font-bold text-accent leading-tight">
+              R$ {(cartTotals.total / 100).toFixed(2)}
+            </p>
+          </div>
+          <Button
+            onClick={() =>
+              document.getElementById("cart-card")?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
+            className="bg-accent text-accent-foreground hover:bg-accent/90 font-bold shrink-0"
+          >
+            Ver carrinho
+          </Button>
+        </div>
+      )}
 
       {/* Receipt Modal */}
       {lastSaleData && (
