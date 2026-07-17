@@ -42,6 +42,55 @@ export async function fetchSupplierProductStatus(url: string): Promise<SupplierP
   return { price, stockStatus };
 }
 
+// Busca uma página de listagem de categoria do fornecedor e extrai os
+// produtos (nome, slug, preço e foto). Páginas cheias têm 40 itens;
+// menos que isso (ou zero) indica a última página.
+export type SupplierListingItem = {
+  name: string;
+  slug: string;
+  priceCents: number;
+  imageUrl: string | null;
+};
+
+const SUPPLIER_BASE = "https://www.atacadodeumbanda.com.br/";
+
+export async function fetchSupplierListingPage(
+  categoryPath: string,
+  page: number
+): Promise<SupplierListingItem[]> {
+  const sep = categoryPath.includes("?") ? "&" : "?";
+  const url = page === 1
+    ? `${SUPPLIER_BASE}${categoryPath}`
+    : `${SUPPLIER_BASE}${categoryPath}${sep}pagina=${page}`;
+
+  const response = await fetch(url, {
+    headers: {
+      "user-agent": "Mozilla/5.0 (compatible; TocaDaPanteraCatalogBot/1.0)",
+    },
+  });
+  if (!response.ok) return [];
+
+  const html = await response.text();
+  const items: SupplierListingItem[] = [];
+  const blockRe = /<div class="listagem-item prod-id-(\d+)[^"]*"[\s\S]*?(?=<div class="listagem-item prod-id-|<\/ul>)/g;
+  let m: RegExpExecArray | null;
+  while ((m = blockRe.exec(html)) !== null) {
+    const block = m[0];
+    const nameMatch = block.match(/class="nome-produto[^"]*">([^<]+)</);
+    const hrefMatch = block.match(/<a href="([^"]+)" class="nome-produto/);
+    const priceMatch = block.match(/data-sell-price="([\d.]+)"/);
+    const imgMatch = block.match(/<img[^>]+src="([^"]+)"/);
+    if (!nameMatch || !hrefMatch || !priceMatch) continue;
+    items.push({
+      name: nameMatch[1].trim(),
+      slug: hrefMatch[1].replace(SUPPLIER_BASE, ""),
+      priceCents: Math.round(parseFloat(priceMatch[1]) * 100),
+      imageUrl: imgMatch ? imgMatch[1] : null,
+    });
+  }
+  return items;
+}
+
 // Busca a foto principal de um produto direto na página do fornecedor
 // (usada para preencher produtos que ficaram sem foto na importação inicial).
 export async function fetchSupplierProductImage(url: string): Promise<string | null> {

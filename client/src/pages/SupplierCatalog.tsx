@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { trpc } from "@/lib/trpc";
-import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch, PackagePlus, Check } from "lucide-react";
+import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch, PackagePlus, Check, Download } from "lucide-react";
 import { toast } from "sonner";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -31,6 +31,82 @@ const STOCK_LABELS: Record<string, { label: string; className: string }> = {
 
 const centsToBRL = (cents: number) => `R$ ${(cents / 100).toFixed(2)}`;
 
+// Fornecedor Atacado de Umbanda (supplierId 1). Categorias do site mapeadas
+// para as categorias do sistema; a varredura final em /diversos pega o que
+// sobrar (produtos repetidos são ignorados pelo slug).
+const IMPORT_SUPPLIER_ID = 1;
+const IMPORT_SOURCES: { path: string; category: string; label: string }[] = [
+  { path: "guias", category: "guias", label: "Guias" },
+  { path: "guia-micanguinha", category: "guias", label: "Guias miçanguinha" },
+  { path: "guias-de-cristal", category: "guias", label: "Guias de cristal" },
+  { path: "guias-de-micanga", category: "guias", label: "Guias de miçanga" },
+  { path: "guias-especiais", category: "guias", label: "Guias especiais" },
+  { path: "brajas", category: "guias", label: "Brajás" },
+  { path: "pulseiras-23553907", category: "pulseiras", label: "Pulseiras" },
+  { path: "pingentes", category: "pulseiras", label: "Pingentes" },
+  { path: "vela-de-magia", category: "velas", label: "Velas de magia" },
+  { path: "vela-de-magia-23881892", category: "velas", label: "Velas de magia (2)" },
+  { path: "casticais-e-turibulos", category: "velas", label: "Castiçais e turíbulos" },
+  { path: "incenso-box", category: "incensos", label: "Incenso box" },
+  { path: "incenso-cascata", category: "incensos", label: "Incenso cascata" },
+  { path: "nirvana", category: "incensos", label: "Incensos Nirvana" },
+  { path: "satya", category: "incensos", label: "Incensos Satya" },
+  { path: "vareta-carvao", category: "incensos", label: "Varetas de carvão" },
+  { path: "vareta-noa-signos", category: "incensos", label: "Varetas Noa" },
+  { path: "defumadores", category: "incensos", label: "Defumadores" },
+  { path: "incensarios", category: "incensos", label: "Incensários" },
+  { path: "banho-e-ervas", category: "ervas", label: "Banhos e ervas" },
+  { path: "banho-liquido", category: "ervas", label: "Banho líquido" },
+  { path: "ervas-seca", category: "ervas", label: "Ervas secas" },
+  { path: "essencias", category: "ervas", label: "Essências" },
+  { path: "alfazema", category: "ervas", label: "Alfazema" },
+  { path: "mel-e-dende", category: "ervas", label: "Mel e dendê" },
+  { path: "po-23003426", category: "ervas", label: "Pós rituais" },
+  { path: "sabao-costa-22846208", category: "ervas", label: "Sabão da costa" },
+  { path: "atrativos", category: "ervas", label: "Atrativos" },
+  { path: "pemba-23133561", category: "ervas", label: "Pembas" },
+  { path: "imagens", category: "imagens", label: "Imagens" },
+  { path: "imagem-de-chumbo", category: "imagens", label: "Imagens de chumbo" },
+  { path: "imagem-de-gesso", category: "imagens", label: "Imagens de gesso" },
+  { path: "imagem-resina-10cm", category: "imagens", label: "Imagens resina 10cm" },
+  { path: "imagem-resina-15-cm", category: "imagens", label: "Imagens resina 15cm" },
+  { path: "imagem-resina-grande", category: "imagens", label: "Imagens resina grandes" },
+  { path: "vudu", category: "imagens", label: "Vudu" },
+  { path: "linha-egipcia", category: "imagens", label: "Linha egípcia" },
+  { path: "africanos", category: "imagens", label: "Africanos" },
+  { path: "indigenas-22873500", category: "imagens", label: "Indígenas" },
+  { path: "baralhos-e-tarot", category: "livros", label: "Baralhos e tarô" },
+  { path: "aya-mystic", category: "livros", label: "Aya Mystic" },
+  { path: "pedras-23129627", category: "pedras", label: "Pedras" },
+  { path: "agatas", category: "pedras", label: "Ágatas" },
+  { path: "cristal-e-micangas", category: "pedras", label: "Cristais e miçangas" },
+  { path: "corais-23003431", category: "pedras", label: "Corais" },
+  { path: "buzios-22846182", category: "pedras", label: "Búzios" },
+  { path: "ferro-e-chumbo", category: "ferramentas", label: "Ferro e chumbo" },
+  { path: "facas", category: "ferramentas", label: "Facas" },
+  { path: "punhais", category: "ferramentas", label: "Punhais" },
+  { path: "bigornas", category: "ferramentas", label: "Bigornas" },
+  { path: "bengalas", category: "ferramentas", label: "Bengalas" },
+  { path: "alguidar", category: "ferramentas", label: "Alguidares" },
+  { path: "gamelas", category: "ferramentas", label: "Gamelas" },
+  { path: "quartinha-branca", category: "ferramentas", label: "Quartinhas" },
+  { path: "tacas-23129994", category: "ferramentas", label: "Taças" },
+  { path: "taca-de-vidro", category: "ferramentas", label: "Taças de vidro" },
+  { path: "prato-de-louca", category: "ferramentas", label: "Pratos de louça" },
+  { path: "colher-e-pilao", category: "ferramentas", label: "Colher e pilão" },
+  { path: "peneiras-23289805", category: "ferramentas", label: "Peneiras" },
+  { path: "cabacas-23289816", category: "ferramentas", label: "Cabaças" },
+  { path: "ofertorios", category: "ferramentas", label: "Ofertórios" },
+  { path: "abebe", category: "ferramentas", label: "Abebés" },
+  { path: "roupas-23089187", category: "vestuario", label: "Roupas" },
+  { path: "chapeus-22846189", category: "vestuario", label: "Chapéus" },
+  { path: "cap-marinheiro", category: "vestuario", label: "Cap. marinheiro" },
+  { path: "morim", category: "vestuario", label: "Morim" },
+  { path: "paramentas", category: "vestuario", label: "Paramentas" },
+  { path: "couro-22846197", category: "vestuario", label: "Couro" },
+  { path: "diversos", category: "outros", label: "Demais produtos" },
+];
+
 const timeAgo = (dateStr: string | Date) => {
   const date = new Date(dateStr);
   const diffMs = Date.now() - date.getTime();
@@ -52,6 +128,8 @@ export default function SupplierCatalog() {
 
   const [backfilling, setBackfilling] = useState(false);
   const [addingId, setAddingId] = useState<number | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState("");
 
   const utils = trpc.useUtils();
   const { data: items, isLoading } = trpc.supplierCatalog.list.useQuery({});
@@ -60,6 +138,7 @@ export default function SupplierCatalog() {
   const updatePriceMutation = trpc.supplierCatalog.updateSuggestedPrice.useMutation();
   const backfillImagesMutation = trpc.supplierCatalog.backfillImages.useMutation();
   const addToInventoryMutation = trpc.supplierCatalog.addToInventory.useMutation();
+  const importSiteMutation = trpc.supplierCatalog.importFromSupplierSite.useMutation();
 
   const myProductNames = useMemo(
     () => new Set((myProducts ?? []).map((p) => p.name.trim().toLowerCase())),
@@ -119,6 +198,48 @@ export default function SupplierCatalog() {
       toast.error(error?.message ?? "Erro ao buscar fotos");
     } finally {
       setBackfilling(false);
+    }
+  };
+
+  const handleImportAll = async () => {
+    if (!confirm(
+      "Isso vai buscar TODOS os produtos do site do fornecedor e adicionar os que ainda não estão no Oráculo. Pode levar alguns minutos. Continuar?"
+    )) return;
+
+    setImporting(true);
+    let totalInserted = 0;
+    try {
+      for (let i = 0; i < IMPORT_SOURCES.length; i++) {
+        const source = IMPORT_SOURCES[i];
+        setImportProgress(`${source.label} (${i + 1}/${IMPORT_SOURCES.length})`);
+        let page: number | null = 1;
+        while (page !== null) {
+          const result: { found: number; inserted: number; nextPage: number | null } =
+            await importSiteMutation.mutateAsync({
+              supplierId: IMPORT_SUPPLIER_ID,
+              categoryPath: source.path,
+              myCategory: source.category as any,
+              startPage: page,
+            });
+          totalInserted += result.inserted;
+          page = result.nextPage;
+        }
+        if ((i + 1) % 10 === 0) await utils.supplierCatalog.list.invalidate();
+      }
+      await utils.supplierCatalog.list.invalidate();
+      toast.success(
+        totalInserted > 0
+          ? `Importação concluída! ${totalInserted} produto(s) novo(s) adicionado(s).`
+          : "Importação concluída! Nenhum produto novo — o catálogo já estava completo."
+      );
+    } catch (error: any) {
+      await utils.supplierCatalog.list.invalidate();
+      toast.error(
+        `A importação parou no meio (${totalInserted} adicionados até agora). Clique de novo para continuar de onde parou. ${error?.message ?? ""}`
+      );
+    } finally {
+      setImporting(false);
+      setImportProgress("");
     }
   };
 
@@ -221,6 +342,17 @@ export default function SupplierCatalog() {
 
       <div className="flex items-center justify-between flex-wrap gap-2">
         <p className="text-sm text-muted-foreground font-medium">{filtered.length} produto(s) encontrado(s)</p>
+        <div className="flex items-center gap-2 flex-wrap">
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-accent/30 text-accent hover:bg-accent/10 h-9"
+          disabled={importing || backfilling}
+          onClick={handleImportAll}
+        >
+          <Download className={`w-3.5 h-3.5 mr-1.5 ${importing ? "animate-bounce" : ""}`} />
+          {importing ? `Importando: ${importProgress}` : "Importar tudo do fornecedor"}
+        </Button>
         {missingImagesCount > 0 && (
           <Button
             size="sm"
@@ -235,6 +367,7 @@ export default function SupplierCatalog() {
               : `Buscar ${missingImagesCount} foto(s) faltando`}
           </Button>
         )}
+        </div>
       </div>
 
       {filtered.length === 0 ? (

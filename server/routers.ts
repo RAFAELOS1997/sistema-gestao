@@ -5,7 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
 import { hashPassword, verifyPassword } from "./_core/password";
 import { sdk } from "./_core/sdk";
-import { fetchSupplierProductStatus, fetchSupplierProductImage } from "./_core/supplierScraper";
+import { fetchSupplierProductStatus, fetchSupplierProductImage, fetchSupplierListingPage } from "./_core/supplierScraper";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
@@ -794,6 +794,63 @@ const supplierCatalogRouter = router({
   updateSuggestedPrice: protectedProcedure
     .input(z.object({ id: z.number().int().positive(), suggestedSalePrice: z.number().int().positive() }))
     .mutation(({ input }) => updateSupplierCatalogItem(input.id, { suggestedSalePrice: input.suggestedSalePrice })),
+
+  importFromSupplierSite: protectedProcedure
+    .input(
+      z.object({
+        supplierId: z.number().int().positive(),
+        categoryPath: z.string().min(1),
+        myCategory: CATALOG_CATEGORY,
+        startPage: z.number().int().min(1).default(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      const MAX_PAGES_PER_CALL = 8; // evita estourar o tempo da requisição
+      const existing = await listSupplierCatalog(input.supplierId);
+      const existingSlugs = new Set(existing.map((item) => item.sourceSlug));
+
+      let found = 0;
+      let inserted = 0;
+      let nextPage: number | null = input.startPage;
+
+      for (let i = 0; i < MAX_PAGES_PER_CALL && nextPage; i++) {
+        const items = await fetchSupplierListingPage(input.categoryPath, nextPage);
+        if (items.length === 0) {
+          nextPage = null;
+          break;
+        }
+        found += items.length;
+
+        const fresh = items.filter((item) => !existingSlugs.has(item.slug));
+        for (const item of fresh) existingSlugs.add(item.slug);
+        if (fresh.length > 0) {
+          await createSupplierCatalogBatch(
+            fresh.map((item) => ({
+              supplierId: input.supplierId,
+              name: item.name,
+              category: input.myCategory,
+              sourceSlug: item.slug,
+              sourceUrl: "https://www.atacadodeumbanda.com.br/" + item.slug,
+              imageUrl: item.imageUrl,
+              price: item.priceCents,
+              suggestedSalePrice: suggestSalePrice(item.priceCents),
+              stockStatus: "desconhecido" as const,
+            }))
+          );
+          inserted += fresh.length;
+        }
+
+        // Páginas cheias têm 40 itens; menos que isso é a última página
+        if (items.length < 40) {
+          nextPage = null;
+        } else {
+          nextPage += 1;
+          await new Promise((resolve) => setTimeout(resolve, 250));
+        }
+      }
+
+      return { found, inserted, nextPage };
+    }),
 
   addToInventory: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
