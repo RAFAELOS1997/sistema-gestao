@@ -114,6 +114,106 @@ const productsRouter = router({
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(({ input }) => deleteProduct(input.id)),
 
+  // Confere uma lista de itens de uma nota/pedido contra os produtos e
+  // compras já cadastrados, pra corrigir custos que entraram errados
+  // (ex.: erro de leitura de uma nota importada anteriormente).
+  auditOrder: protectedProcedure
+    .input(
+      z.object({
+        items: z.array(
+          z.object({
+            name: z.string().min(1),
+            unitPriceCents: z.number().int().positive(),
+            quantity: z.number().int().positive(),
+          })
+        ).min(1),
+      })
+    )
+    .query(async ({ input }) => {
+      const DIACRITICS_RE = new RegExp("[\\u0300-\\u036f]", "g");
+      const normalize = (s: string) =>
+        s
+          .normalize("NFD")
+          .replace(DIACRITICS_RE, "")
+          .toUpperCase()
+          .replace(/[^A-Z0-9]+/g, " ")
+          .trim();
+
+      const allProducts = await listProducts(true);
+      const allPurchases = await listPurchases(1000);
+
+      return input.items.map((item) => {
+        const normalizedInvoiceName = normalize(item.name);
+        const product = allProducts.find((p) => normalize(p.name) === normalizedInvoiceName);
+
+        if (!product) {
+          return {
+            invoiceName: item.name,
+            invoiceUnitPriceCents: item.unitPriceCents,
+            invoiceQuantity: item.quantity,
+            matched: false as const,
+          };
+        }
+
+        // Entre as compras desse produto, pega a mais recente (é a mais provável
+        // de ser a desse pedido, já que os produtos vieram de uma importação única)
+        const candidatePurchases = allPurchases
+          .filter((p) => p.productId === product.id)
+          .sort((a, b) => new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime());
+        const purchase = candidatePurchases[0] ?? null;
+
+        return {
+          invoiceName: item.name,
+          invoiceUnitPriceCents: item.unitPriceCents,
+          invoiceQuantity: item.quantity,
+          matched: true as const,
+          productId: product.id,
+          productName: product.name,
+          currentCostPriceCents: product.costPrice,
+          purchaseId: purchase?.id ?? null,
+          purchaseUnitPriceCents: purchase?.unitPrice ?? null,
+          purchaseQuantity: purchase?.quantity ?? null,
+          purchaseDate: purchase?.purchaseDate ?? null,
+        };
+      });
+    }),
+
+  applyOrderCorrections: protectedProcedure
+    .input(
+      z.object({
+        corrections: z.array(
+          z.object({
+            productId: z.number().int().positive(),
+            newCostPriceCents: z.number().int().positive(),
+            purchaseId: z.number().int().positive().nullable(),
+            newPurchaseUnitPriceCents: z.number().int().positive().nullable(),
+            // Quantidade a usar no total da compra (corrigida ou a mesma de antes).
+            purchaseQuantityForTotal: z.number().int().positive().nullable(),
+            // Presente só quando a quantidade da compra também deve ser corrigida
+            // (isso ajusta o estoque automaticamente).
+            newPurchaseQuantity: z.number().int().positive().nullable(),
+          })
+        ).min(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      let productsUpdated = 0;
+      let purchasesUpdated = 0;
+      for (const c of input.corrections) {
+        await updateProduct(c.productId, { costPrice: c.newCostPriceCents });
+        productsUpdated++;
+        if (c.purchaseId && c.newPurchaseUnitPriceCents && c.purchaseQuantityForTotal) {
+          await updatePurchase(c.purchaseId, {
+            unitPrice: c.newPurchaseUnitPriceCents,
+            totalPrice: c.newPurchaseUnitPriceCents * c.purchaseQuantityForTotal,
+            ...(c.newPurchaseQuantity ? { quantity: c.newPurchaseQuantity } : {}),
+          });
+          purchasesUpdated++;
+        }
+      }
+      return { productsUpdated, purchasesUpdated };
+    }),
+
   deactivate: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
     .mutation(({ input }) => deactivateProduct(input.id)),

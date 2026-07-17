@@ -10,6 +10,7 @@ import Home from "./pages/Home";
 import Login from "./pages/Login";
 import PriceReview from "./pages/PriceReview";
 import SupplierCatalog from "./pages/SupplierCatalog";
+import AuditPedido7335 from "./pages/AuditPedido7335";
 import Products from "./pages/Products";
 import Purchases from "./pages/Purchases";
 import Sales from "./pages/Sales";
@@ -62,6 +63,11 @@ function Router() {
       <Route path="/oraculo">
         <DashboardLayout>
           <SupplierCatalog />
+        </DashboardLayout>
+      </Route>
+      <Route path="/conferencia-pedido-7335">
+        <DashboardLayout>
+          <AuditPedido7335 />
         </DashboardLayout>
       </Route>
       <Route path="/settings">
