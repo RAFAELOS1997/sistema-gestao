@@ -49,6 +49,10 @@ export default function Products() {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("todas");
   const [pullingImages, setPullingImages] = useState(false);
+  const [imageSuggestions, setImageSuggestions] = useState<
+    { productId: number; productName: string; catalogName: string; imageUrl: string; score: number }[]
+  >([]);
+  const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
 
   const utils = trpc.useUtils();
   const { data: products, isLoading } = trpc.products.list.useQuery({ includeInactive: showInactive });
@@ -68,26 +72,39 @@ export default function Products() {
     onSuccess: () => { utils.products.list.invalidate(); utils.analytics.dashboard.invalidate(); utils.analytics.byCategory.invalidate(); },
   });
   const pullImagesMutation = trpc.products.pullImagesFromOracle.useMutation();
+  const applySuggestionsMutation = trpc.products.applyImageSuggestions.useMutation();
 
   const handlePullImages = async () => {
     setPullingImages(true);
     try {
       const result = await pullImagesMutation.mutateAsync();
       await utils.products.list.invalidate();
-      if (result.updated === 0 && result.unmatched.length === 0) {
-        toast.success("Todos os produtos já têm foto atualizada!");
-      } else {
-        toast.success(
-          `${result.updated} foto(s) atualizada(s)! ` +
-          (result.unmatched.length > 0
-            ? `${result.unmatched.length} produto(s) sem correspondência no Oráculo.`
-            : "")
-        );
-      }
+      setImageSuggestions(result.suggestions);
+      setDismissedSuggestions(new Set());
+
+      const parts: string[] = [];
+      if (result.updated > 0) parts.push(`${result.updated} foto(s) atualizada(s) automaticamente`);
+      if (result.suggestions.length > 0) parts.push(`${result.suggestions.length} sugestão(ões) pra você revisar abaixo`);
+      if (result.catalogEntryMissingPhoto.length > 0) parts.push(`${result.catalogEntryMissingPhoto.length} produto(s) existem no Oráculo mas ainda sem foto lá (use "Buscar fotos faltando" no Oráculo)`);
+      if (result.noCatalogEntry.length > 0) parts.push(`${result.noCatalogEntry.length} produto(s) não encontrados no Oráculo`);
+
+      if (parts.length === 0) toast.success("Todos os produtos já têm foto atualizada!");
+      else toast.success(parts.join(". ") + ".");
     } catch (error: any) {
       toast.error(error?.message ?? "Erro ao puxar fotos do Oráculo");
     } finally {
       setPullingImages(false);
+    }
+  };
+
+  const handleAcceptSuggestion = async (s: { productId: number; imageUrl: string }) => {
+    try {
+      await applySuggestionsMutation.mutateAsync({ items: [{ productId: s.productId, imageUrl: s.imageUrl }] });
+      await utils.products.list.invalidate();
+      setImageSuggestions((prev) => prev.filter((x) => x.productId !== s.productId));
+      toast.success("Foto aplicada!");
+    } catch (error: any) {
+      toast.error(error?.message ?? "Erro ao aplicar foto");
     }
   };
 
@@ -330,6 +347,45 @@ export default function Products() {
         </Dialog>
         </div>
       </div>
+
+      {imageSuggestions.filter((s) => !dismissedSuggestions.has(s.productId)).length > 0 && (
+        <Card className="bg-card border-accent/30">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-foreground">Fotos parecidas pra revisar</CardTitle>
+            <CardDescription>
+              O nome no seu estoque não é idêntico ao do Oráculo, mas parece ser o mesmo produto. Confira antes de aplicar.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {imageSuggestions
+              .filter((s) => !dismissedSuggestions.has(s.productId))
+              .map((s) => (
+                <div key={s.productId} className="flex items-center gap-3 p-2 bg-background rounded-lg border border-border">
+                  <img src={s.imageUrl} alt={s.catalogName} className="w-12 h-12 rounded object-cover border border-border shrink-0" loading="lazy" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm text-foreground font-medium truncate">{s.productName}</p>
+                    <p className="text-xs text-muted-foreground truncate">Oráculo: {s.catalogName}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="bg-accent text-accent-foreground hover:bg-accent/90 shrink-0"
+                    onClick={() => handleAcceptSuggestion(s)}
+                  >
+                    Usar foto
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-border shrink-0"
+                    onClick={() => setDismissedSuggestions((prev) => new Set(prev).add(s.productId))}
+                  >
+                    Ignorar
+                  </Button>
+                </div>
+              ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="bg-card border-border">
         <CardContent className="p-4 space-y-3">

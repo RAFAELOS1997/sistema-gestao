@@ -216,7 +216,9 @@ const productsRouter = router({
     }),
 
   // Puxa as fotos dos produtos do estoque a partir dos itens equivalentes
-  // já cadastrados n'O Oráculo (casando pelo nome, ignorando acento/maiúscula).
+  // já cadastrados n'O Oráculo. Casamento em duas etapas: nome idêntico (ignorando
+  // acento/maiúscula) aplica direto; nome parecido (a maioria das palavras bate)
+  // fica pendente de revisão em vez de aplicar às cegas.
   pullImagesFromOracle: protectedProcedure.mutation(async () => {
     await ensureProductImageColumn();
 
@@ -227,39 +229,99 @@ const productsRouter = router({
         .toUpperCase()
         .replace(/[^A-Z0-9]+/g, " ")
         .trim();
+    const tokenize = (s: string) => normalize(s).split(" ").filter((w) => w.length > 1);
+    // Cobertura: quanto das palavras do lado menor aparecem no lado maior.
+    // Order-independente e tolera nomes com palavras a mais de um dos lados.
+    // Exige pelo menos 2 palavras em comum pra evitar "falso positivo" por uma
+    // única palavra genérica (ex.: só "GUIA" ou só "IMAGEM").
+    const coverage = (aTokens: string[], bTokens: string[]) => {
+      const aSet = new Set(aTokens);
+      const bSet = new Set(bTokens);
+      let shared = 0;
+      aSet.forEach((t) => { if (bSet.has(t)) shared++; });
+      if (shared < 2 && Math.min(aSet.size, bSet.size) > 1) return 0;
+      return shared / Math.min(aSet.size, bSet.size);
+    };
 
     const [allProducts, catalogItems] = await Promise.all([
       listProducts(true),
       listSupplierCatalog(),
     ]);
 
-    const catalogByName = new Map<string, string>();
-    for (const item of catalogItems) {
-      if (!item.imageUrl) continue;
+    const catalogWithImage = catalogItems.filter((i) => !!i.imageUrl);
+    const catalogExactByName = new Map<string, string>();
+    for (const item of catalogWithImage) {
       const key = normalize(item.name);
-      if (!catalogByName.has(key)) catalogByName.set(key, item.imageUrl);
+      if (!catalogExactByName.has(key)) catalogExactByName.set(key, item.imageUrl!);
     }
+    const catalogTokenized = catalogWithImage.map((item) => ({
+      name: item.name,
+      imageUrl: item.imageUrl!,
+      tokens: tokenize(item.name),
+    }));
+    const catalogNoImageNormalized = new Set(
+      catalogItems.filter((i) => !i.imageUrl).map((i) => normalize(i.name))
+    );
 
     let updated = 0;
     let alreadyHadImage = 0;
-    const unmatched: string[] = [];
+    const noCatalogEntry: string[] = [];
+    const catalogEntryMissingPhoto: string[] = [];
+    const suggestions: { productId: number; productName: string; catalogName: string; imageUrl: string; score: number }[] = [];
 
     for (const product of allProducts) {
-      const match = catalogByName.get(normalize(product.name));
-      if (!match) {
-        unmatched.push(product.name);
+      const normalizedProductName = normalize(product.name);
+      const exact = catalogExactByName.get(normalizedProductName);
+      if (exact) {
+        if (product.imageUrl === exact) alreadyHadImage++;
+        else { await updateProduct(product.id, { imageUrl: exact }); updated++; }
         continue;
       }
-      if (product.imageUrl === match) {
-        alreadyHadImage++;
+
+      if (catalogNoImageNormalized.has(normalizedProductName)) {
+        catalogEntryMissingPhoto.push(product.name);
         continue;
       }
-      await updateProduct(product.id, { imageUrl: match });
-      updated++;
+
+      // Sem correspondência exata: procura o item do catálogo mais parecido
+      const productTokens = tokenize(product.name);
+      let best: { name: string; imageUrl: string; score: number } | null = null;
+      for (const candidate of catalogTokenized) {
+        const score = coverage(productTokens, candidate.tokens);
+        if (!best || score > best.score) best = { name: candidate.name, imageUrl: candidate.imageUrl, score };
+      }
+
+      if (best && best.score >= 0.85) {
+        // Muito parecido (ex.: só uma palavra a mais/menos) — aplica direto
+        if (product.imageUrl !== best.imageUrl) {
+          await updateProduct(product.id, { imageUrl: best.imageUrl });
+          updated++;
+        } else {
+          alreadyHadImage++;
+        }
+      } else if (best && best.score >= 0.5) {
+        // Parecido mas arriscado — fica pra revisão manual
+        suggestions.push({ productId: product.id, productName: product.name, catalogName: best.name, imageUrl: best.imageUrl, score: best.score });
+      } else {
+        noCatalogEntry.push(product.name);
+      }
     }
 
-    return { updated, alreadyHadImage, unmatched };
+    return { updated, alreadyHadImage, noCatalogEntry, catalogEntryMissingPhoto, suggestions };
   }),
+
+  applyImageSuggestions: protectedProcedure
+    .input(
+      z.object({
+        items: z.array(z.object({ productId: z.number().int().positive(), imageUrl: z.string().min(1) })).min(1),
+      })
+    )
+    .mutation(async ({ input }) => {
+      for (const item of input.items) {
+        await updateProduct(item.productId, { imageUrl: item.imageUrl });
+      }
+      return { updated: input.items.length };
+    }),
 
   deactivate: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
