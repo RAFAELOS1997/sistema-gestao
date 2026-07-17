@@ -41,3 +41,23 @@ export async function fetchSupplierProductStatus(url: string): Promise<SupplierP
 
   return { price, stockStatus };
 }
+
+// Busca a foto principal de um produto direto na página do fornecedor
+// (usada para preencher produtos que ficaram sem foto na importação inicial).
+export async function fetchSupplierProductImage(url: string): Promise<string | null> {
+  const response = await fetch(url, {
+    headers: {
+      "user-agent": "Mozilla/5.0 (compatible; TocaDaPanteraCatalogBot/1.0)",
+    },
+  });
+
+  if (!response.ok) return null;
+
+  const html = await response.text();
+  const match = html.match(/<meta property="og:image" content="([^"]+)"/);
+  const imageUrl = match ? match[1] : null;
+  // Páginas sem uma foto própria (produto removido, redirecionado etc.) caem
+  // no logo genérico do site — não é a foto do produto, então é descartado.
+  if (imageUrl && !imageUrl.includes("/produto/")) return null;
+  return imageUrl;
+}

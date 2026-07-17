@@ -561,7 +561,7 @@ export async function createSupplierCatalogBatch(items: InsertSupplierCatalogIte
 
 export async function updateSupplierCatalogItem(
   id: number,
-  data: Partial<{ price: number; suggestedSalePrice: number; stockStatus: "disponivel" | "indisponivel" | "desconhecido"; lastCheckedAt: Date }>
+  data: Partial<{ price: number; suggestedSalePrice: number; stockStatus: "disponivel" | "indisponivel" | "desconhecido"; lastCheckedAt: Date; imageUrl: string }>
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

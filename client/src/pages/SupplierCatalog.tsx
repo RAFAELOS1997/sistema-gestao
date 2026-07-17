@@ -50,10 +50,18 @@ export default function SupplierCatalog() {
   const [refreshingId, setRefreshingId] = useState<number | null>(null);
   const [priceEdits, setPriceEdits] = useState<Record<number, string>>({});
 
+  const [backfilling, setBackfilling] = useState(false);
+
   const utils = trpc.useUtils();
   const { data: items, isLoading } = trpc.supplierCatalog.list.useQuery({});
   const refreshMutation = trpc.supplierCatalog.refresh.useMutation();
   const updatePriceMutation = trpc.supplierCatalog.updateSuggestedPrice.useMutation();
+  const backfillImagesMutation = trpc.supplierCatalog.backfillImages.useMutation();
+
+  const missingImagesCount = useMemo(
+    () => (items ?? []).filter((item) => !item.imageUrl).length,
+    [items]
+  );
 
   const filtered = useMemo(() => {
     let list = items ?? [];
@@ -82,6 +90,27 @@ export default function SupplierCatalog() {
       toast.error(error?.message ?? "Erro ao atualizar produto");
     } finally {
       setRefreshingId(null);
+    }
+  };
+
+  const handleBackfillImages = async () => {
+    setBackfilling(true);
+    try {
+      const result = await backfillImagesMutation.mutateAsync();
+      await utils.supplierCatalog.list.invalidate();
+      if (result.updated > 0) {
+        toast.success(
+          result.remaining > 0
+            ? `${result.updated} foto(s) encontrada(s)! Clique de novo para buscar as ${result.remaining} restantes.`
+            : `${result.updated} foto(s) encontrada(s) no site do fornecedor!`
+        );
+      } else {
+        toast.info("Nenhuma foto nova encontrada no site do fornecedor para esses produtos.");
+      }
+    } catch (error: any) {
+      toast.error(error?.message ?? "Erro ao buscar fotos");
+    } finally {
+      setBackfilling(false);
     }
   };
 
@@ -169,7 +198,23 @@ export default function SupplierCatalog() {
         </CardContent>
       </Card>
 
-      <p className="text-sm text-muted-foreground font-medium">{filtered.length} produto(s) encontrado(s)</p>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <p className="text-sm text-muted-foreground font-medium">{filtered.length} produto(s) encontrado(s)</p>
+        {missingImagesCount > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="border-accent/30 text-accent hover:bg-accent/10 h-9"
+            disabled={backfilling}
+            onClick={handleBackfillImages}
+          >
+            <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${backfilling ? "animate-spin" : ""}`} />
+            {backfilling
+              ? "Buscando fotos..."
+              : `Buscar ${missingImagesCount} foto(s) faltando`}
+          </Button>
+        )}
+      </div>
 
       {filtered.length === 0 ? (
         <Card className="bg-card border-border">

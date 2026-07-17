@@ -5,7 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
 import { hashPassword, verifyPassword } from "./_core/password";
 import { sdk } from "./_core/sdk";
-import { fetchSupplierProductStatus } from "./_core/supplierScraper";
+import { fetchSupplierProductStatus, fetchSupplierProductImage } from "./_core/supplierScraper";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
@@ -792,6 +792,29 @@ const supplierCatalogRouter = router({
   updateSuggestedPrice: protectedProcedure
     .input(z.object({ id: z.number().int().positive(), suggestedSalePrice: z.number().int().positive() }))
     .mutation(({ input }) => updateSupplierCatalogItem(input.id, { suggestedSalePrice: input.suggestedSalePrice })),
+
+  backfillImages: protectedProcedure.mutation(async () => {
+    const BATCH_LIMIT = 60; // evita estourar o tempo de resposta da requisição
+    const items = await listSupplierCatalog();
+    const missing = items.filter((item) => !item.imageUrl);
+    const batch = missing.slice(0, BATCH_LIMIT);
+
+    let updated = 0;
+    for (const item of batch) {
+      try {
+        const imageUrl = await fetchSupplierProductImage(item.sourceUrl);
+        if (imageUrl) {
+          await updateSupplierCatalogItem(item.id, { imageUrl });
+          updated++;
+        }
+      } catch {
+        // ignora falhas individuais e segue para o próximo produto
+      }
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+
+    return { checked: batch.length, updated, remaining: missing.length - batch.length };
+  }),
 
   delete: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
