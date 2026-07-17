@@ -97,7 +97,11 @@ export async function ensureProductImageColumn() {
     await db.execute(sql`ALTER TABLE products ADD COLUMN imageUrl TEXT`);
     return { added: true };
   } catch (error: any) {
-    if (error?.code === "ER_DUP_FIELDNAME" || /duplicate column/i.test(error?.message ?? "")) {
+    // drizzle-orm/mysql2 embrulha o erro real do driver em .cause — o código
+    // e a mensagem originais (ex.: ER_DUP_FIELDNAME) não ficam no topo.
+    const code = error?.code ?? error?.cause?.code;
+    const message = error?.message ?? error?.cause?.message ?? "";
+    if (code === "ER_DUP_FIELDNAME" || /duplicate column/i.test(message)) {
       return { added: false };
     }
     throw error;
