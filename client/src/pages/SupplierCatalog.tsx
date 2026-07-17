@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { trpc } from "@/lib/trpc";
-import { RefreshCw, ExternalLink, Store, Search } from "lucide-react";
+import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch } from "lucide-react";
 import { toast } from "sonner";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -116,64 +116,70 @@ export default function SupplierCatalog() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
-          <Store className="h-7 w-7 text-accent" />
-          Catálogo de Fornecedores
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Consulte produtos, preços e estoque direto do site dos seus fornecedores
-        </p>
+    <div className="space-y-5">
+      <div className="flex items-center gap-3">
+        <div className="h-11 w-11 rounded-xl bg-accent/15 border border-accent/30 flex items-center justify-center shrink-0">
+          <Sparkles className="h-6 w-6 text-accent" />
+        </div>
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">
+            O Oráculo
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Produtos, preços e estoque dos seus fornecedores, tudo num só lugar
+          </p>
+        </div>
       </div>
 
       <Card className="bg-card border-border">
-        <CardContent className="pt-6 flex flex-col md:flex-row gap-4">
-          <div className="relative flex-1">
+        <CardContent className="p-4 space-y-3">
+          <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar produto..."
-              className="bg-background border-border text-foreground pl-9"
+              className="bg-background border-border text-foreground pl-9 h-11 text-base"
             />
           </div>
-          <Select value={category} onValueChange={setCategory}>
-            <SelectTrigger className="bg-background border-border text-foreground w-full md:w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-card border-border">
-              <SelectItem value="todas">Todas as categorias</SelectItem>
-              {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                <SelectItem key={value} value={value}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="bg-background border-border text-foreground w-full md:w-56">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent className="bg-card border-border">
-              <SelectItem value="nome">Ordenar por nome</SelectItem>
-              <SelectItem value="preco-asc">Menor preço</SelectItem>
-              <SelectItem value="preco-desc">Maior preço</SelectItem>
-              <SelectItem value="atualizado">Atualizados recentemente</SelectItem>
-            </SelectContent>
-          </Select>
+          <div className="grid grid-cols-2 gap-3">
+            <Select value={category} onValueChange={setCategory}>
+              <SelectTrigger className="bg-background border-border text-foreground h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                <SelectItem value="todas">Todas as categorias</SelectItem>
+                {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
+                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="bg-background border-border text-foreground h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                <SelectItem value="nome">Nome (A-Z)</SelectItem>
+                <SelectItem value="preco-asc">Menor preço</SelectItem>
+                <SelectItem value="preco-desc">Maior preço</SelectItem>
+                <SelectItem value="atualizado">Atualizados recentemente</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
-      <p className="text-sm text-muted-foreground">{filtered.length} produto(s) encontrado(s)</p>
+      <p className="text-sm text-muted-foreground font-medium">{filtered.length} produto(s) encontrado(s)</p>
 
       {filtered.length === 0 ? (
         <Card className="bg-card border-border">
-          <CardContent className="py-12 flex flex-col items-center gap-2 text-muted-foreground">
-            <Store className="h-12 w-12 opacity-30" />
+          <CardContent className="py-16 flex flex-col items-center gap-3 text-muted-foreground">
+            <PackageSearch className="h-12 w-12 opacity-30" />
             <p>Nenhum produto encontrado.</p>
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
           {filtered.map((item) => {
             const stockInfo = STOCK_LABELS[item.stockStatus] ?? STOCK_LABELS.desconhecido;
             const editedValue = priceEdits[item.id];
@@ -182,47 +188,55 @@ export default function SupplierCatalog() {
                 ? Math.round(((item.suggestedSalePrice - item.price) / item.suggestedSalePrice) * 100)
                 : null;
             return (
-              <Card key={item.id} className="bg-card border-border overflow-hidden flex flex-col">
-                <div className="aspect-square bg-background flex items-center justify-center overflow-hidden">
+              <Card
+                key={item.id}
+                className="bg-card border-border overflow-hidden flex flex-col py-0 gap-0 transition-colors hover:border-accent/40"
+              >
+                <div className="relative aspect-square bg-background flex items-center justify-center overflow-hidden">
                   {item.imageUrl ? (
                     <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
                   ) : (
-                    <Store className="h-10 w-10 text-muted-foreground opacity-30" />
+                    <PackageSearch className="h-10 w-10 text-muted-foreground opacity-30" />
                   )}
+                  <Badge
+                    variant="outline"
+                    className={`absolute top-1.5 right-1.5 text-[10px] px-1.5 py-0.5 backdrop-blur-sm ${stockInfo.className}`}
+                  >
+                    {stockInfo.label}
+                  </Badge>
                 </div>
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-sm text-foreground leading-tight line-clamp-2 min-h-[2.5rem]">
+                <CardHeader className="pb-1.5 pt-2.5 px-2.5 sm:px-3 gap-1">
+                  <CardTitle className="text-xs sm:text-sm text-foreground leading-snug line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem]">
                     {item.name}
                   </CardTitle>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge variant="outline" className="border-accent/40 text-accent text-xs">
-                      {CATEGORY_LABELS[item.category] ?? item.category}
-                    </Badge>
-                    <Badge variant="outline" className={`text-xs ${stockInfo.className}`}>
-                      {stockInfo.label}
-                    </Badge>
-                  </div>
+                  <Badge variant="outline" className="border-accent/40 text-accent text-[10px] w-fit">
+                    {CATEGORY_LABELS[item.category] ?? item.category}
+                  </Badge>
                 </CardHeader>
-                <CardContent className="space-y-3 pt-0 flex-1 flex flex-col">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-xs text-muted-foreground">Custo (atacado)</span>
+                <CardContent className="space-y-2 pt-0 pb-2.5 px-2.5 sm:px-3 flex-1 flex flex-col">
+                  <div className="flex items-baseline justify-between text-xs sm:text-sm">
+                    <span className="text-muted-foreground">Custo</span>
                     <span className="text-foreground font-medium">{centsToBRL(item.price)}</span>
                   </div>
 
-                  <div>
-                    <span className="text-xs text-muted-foreground">Sugestão de venda {margin !== null && `(${margin}% margem)`}</span>
-                    <div className="flex gap-2 mt-1">
+                  <div className="rounded-lg bg-accent/10 border border-accent/20 p-2 space-y-1.5">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[10px] sm:text-xs text-accent/80 font-medium">
+                        Venda sugerida{margin !== null && ` · ${margin}%`}
+                      </span>
+                    </div>
+                    <div className="flex gap-1.5">
                       <Input
                         type="number"
                         step="0.01"
                         min="0"
                         value={editedValue ?? (item.suggestedSalePrice ? (item.suggestedSalePrice / 100).toFixed(2) : "")}
                         onChange={(e) => setPriceEdits((prev) => ({ ...prev, [item.id]: e.target.value }))}
-                        className="bg-background border-border text-foreground text-sm h-8"
+                        className="bg-background border-border text-foreground text-sm h-9 font-semibold"
                       />
                       <Button
                         size="sm"
-                        className="h-8 px-2 bg-accent text-accent-foreground hover:bg-accent/90"
+                        className="h-9 px-3 bg-accent text-accent-foreground hover:bg-accent/90 shrink-0"
                         disabled={editedValue === undefined || updatePriceMutation.isPending}
                         onClick={() => handleSaveSuggested(item.id)}
                       >
@@ -231,26 +245,31 @@ export default function SupplierCatalog() {
                     </div>
                   </div>
 
-                  <p className="text-[11px] text-muted-foreground">
-                    Verificado {timeAgo(item.lastCheckedAt)}
+                  <p className="text-[10px] sm:text-[11px] text-muted-foreground flex items-center gap-1">
+                    <Clock className="h-3 w-3" />
+                    {timeAgo(item.lastCheckedAt)}
                   </p>
 
-                  <div className="flex gap-2 mt-auto pt-2">
+                  <div className="flex gap-1.5 mt-auto pt-1">
                     <a
                       href={item.sourceUrl}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex-1"
                     >
-                      <Button variant="outline" size="sm" className="w-full border-accent/30 text-accent hover:bg-accent/10">
-                        <ExternalLink className="w-3.5 h-3.5 mr-1" />
-                        Ver no site
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full h-9 border-accent/30 text-accent hover:bg-accent/10 px-2"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5 sm:mr-1" />
+                        <span className="hidden sm:inline">Ver no site</span>
                       </Button>
                     </a>
                     <Button
                       size="sm"
                       variant="outline"
-                      className="border-border"
+                      className="border-border h-9 w-9 p-0 shrink-0"
                       disabled={refreshingId === item.id}
                       onClick={() => handleRefresh(item.id)}
                       title="Atualizar preço e estoque no site do fornecedor"

@@ -59,7 +59,7 @@ function Router() {
           <Receipts />
         </DashboardLayout>
       </Route>
-      <Route path="/catalogo-fornecedores">
+      <Route path="/oraculo">
         <DashboardLayout>
           <SupplierCatalog />
         </DashboardLayout>
