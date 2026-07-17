@@ -13,6 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Edit2, Package, Plus, Trash2, Eye, EyeOff, Search, ImageDown } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
+import { ZoomableImage } from "@/components/ZoomableImage";
 
 const CATEGORIES = ["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"] as const;
 const CATEGORY_LABELS: Record<string, string> = {
@@ -401,7 +402,7 @@ export default function Products() {
               .filter((s) => !dismissedSuggestions.has(s.productId))
               .map((s) => (
                 <div key={s.productId} className="flex items-center gap-3 p-2 bg-background rounded-lg border border-border">
-                  <img src={s.imageUrl} alt={s.catalogName} className="w-12 h-12 rounded object-cover border border-border shrink-0" loading="lazy" />
+                  <ZoomableImage src={s.imageUrl} alt={s.catalogName} className="w-12 h-12 rounded border border-border shrink-0" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-foreground font-medium truncate">{s.productName}</p>
                     <p className="text-xs text-muted-foreground truncate">Parecido com: {s.catalogName}</p>
@@ -530,7 +531,7 @@ export default function Products() {
                   <div key={product.id} className="p-3 bg-background rounded-lg border border-border space-y-2">
                     <div className="flex items-start gap-2">
                       {product.imageUrl ? (
-                        <img src={product.imageUrl} alt={product.name} className="w-12 h-12 rounded object-cover shrink-0 border border-border" loading="lazy" />
+                        <ZoomableImage src={product.imageUrl} alt={product.name} className="w-12 h-12 rounded shrink-0 border border-border" />
                       ) : (
                         <div className="w-12 h-12 rounded shrink-0 border border-border bg-card flex items-center justify-center">
                           <Package className="w-5 h-5 text-muted-foreground opacity-40" />
@@ -640,7 +641,7 @@ export default function Products() {
                       <TableRow key={product.id} className="border-border hover:bg-background/50">
                         <TableCell>
                           {product.imageUrl ? (
-                            <img src={product.imageUrl} alt={product.name} className="w-10 h-10 rounded object-cover border border-border" loading="lazy" />
+                            <ZoomableImage src={product.imageUrl} alt={product.name} className="w-10 h-10 rounded border border-border" />
                           ) : (
                             <div className="w-10 h-10 rounded border border-border bg-background flex items-center justify-center">
                               <Package className="w-4 h-4 text-muted-foreground opacity-40" />

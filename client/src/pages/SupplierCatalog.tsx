@@ -8,6 +8,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { trpc } from "@/lib/trpc";
 import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch, PackagePlus, Check, Download } from "lucide-react";
 import { toast } from "sonner";
+import { ZoomableImage } from "@/components/ZoomableImage";
 
 const CATEGORY_LABELS: Record<string, string> = {
   guias: "Guias",
@@ -394,7 +395,7 @@ export default function SupplierCatalog() {
               >
                 <div className="relative aspect-square bg-background flex items-center justify-center overflow-hidden">
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.name} className="w-full h-full object-cover" loading="lazy" />
+                    <ZoomableImage src={item.imageUrl} alt={item.name} className="w-full h-full" />
                   ) : (
                     <PackageSearch className="h-10 w-10 text-muted-foreground opacity-30" />
                   )}
