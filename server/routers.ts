@@ -793,6 +793,46 @@ const supplierCatalogRouter = router({
     .input(z.object({ id: z.number().int().positive(), suggestedSalePrice: z.number().int().positive() }))
     .mutation(({ input }) => updateSupplierCatalogItem(input.id, { suggestedSalePrice: input.suggestedSalePrice })),
 
+  addToInventory: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const item = await getSupplierCatalogItem(input.id);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado" });
+
+      const existing = (await listProducts(true)).find(
+        (p) => p.name.trim().toLowerCase() === item.name.trim().toLowerCase()
+      );
+      if (existing) {
+        throw new TRPCError({
+          code: "CONFLICT",
+          message: `"${item.name}" já está cadastrado nos seus produtos`,
+        });
+      }
+
+      const salePrice = item.suggestedSalePrice ?? suggestSalePrice(item.price);
+      const created = await createProduct({
+        name: item.name,
+        category: item.category,
+        costPrice: item.price,
+        salePrice,
+        currentStock: 0,
+        minimumStock: 5,
+        description: `Importado do Oráculo — ${item.sourceUrl}`,
+      });
+      const productId = (created as any)[0]?.insertId || (created as any).insertId;
+
+      if (productId) {
+        await createProductSupplier({
+          productId,
+          supplierId: item.supplierId,
+          costPrice: item.price,
+          isPreferred: 1,
+        });
+      }
+
+      return { productId, name: item.name };
+    }),
+
   backfillImages: protectedProcedure.mutation(async () => {
     const BATCH_LIMIT = 60; // evita estourar o tempo de resposta da requisição
     const items = await listSupplierCatalog();

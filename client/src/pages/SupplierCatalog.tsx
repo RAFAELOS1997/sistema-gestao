@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { trpc } from "@/lib/trpc";
-import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch } from "lucide-react";
+import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch, PackagePlus, Check } from "lucide-react";
 import { toast } from "sonner";
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -51,12 +51,20 @@ export default function SupplierCatalog() {
   const [priceEdits, setPriceEdits] = useState<Record<number, string>>({});
 
   const [backfilling, setBackfilling] = useState(false);
+  const [addingId, setAddingId] = useState<number | null>(null);
 
   const utils = trpc.useUtils();
   const { data: items, isLoading } = trpc.supplierCatalog.list.useQuery({});
+  const { data: myProducts } = trpc.products.list.useQuery();
   const refreshMutation = trpc.supplierCatalog.refresh.useMutation();
   const updatePriceMutation = trpc.supplierCatalog.updateSuggestedPrice.useMutation();
   const backfillImagesMutation = trpc.supplierCatalog.backfillImages.useMutation();
+  const addToInventoryMutation = trpc.supplierCatalog.addToInventory.useMutation();
+
+  const myProductNames = useMemo(
+    () => new Set((myProducts ?? []).map((p) => p.name.trim().toLowerCase())),
+    [myProducts]
+  );
 
   const missingImagesCount = useMemo(
     () => (items ?? []).filter((item) => !item.imageUrl).length,
@@ -111,6 +119,19 @@ export default function SupplierCatalog() {
       toast.error(error?.message ?? "Erro ao buscar fotos");
     } finally {
       setBackfilling(false);
+    }
+  };
+
+  const handleAddToInventory = async (id: number) => {
+    setAddingId(id);
+    try {
+      const result = await addToInventoryMutation.mutateAsync({ id });
+      await utils.products.list.invalidate();
+      toast.success(`"${result.name}" cadastrado nos seus produtos!`);
+    } catch (error: any) {
+      toast.error(error?.message ?? "Erro ao cadastrar produto");
+    } finally {
+      setAddingId(null);
     }
   };
 
@@ -228,6 +249,7 @@ export default function SupplierCatalog() {
           {filtered.map((item) => {
             const stockInfo = STOCK_LABELS[item.stockStatus] ?? STOCK_LABELS.desconhecido;
             const editedValue = priceEdits[item.id];
+            const alreadyMine = myProductNames.has(item.name.trim().toLowerCase());
             const margin =
               item.suggestedSalePrice && item.price
                 ? Math.round(((item.suggestedSalePrice - item.price) / item.suggestedSalePrice) * 100)
@@ -295,7 +317,35 @@ export default function SupplierCatalog() {
                     {timeAgo(item.lastCheckedAt)}
                   </p>
 
-                  <div className="flex gap-1.5 mt-auto pt-1">
+                  <div className="mt-auto pt-1 space-y-1.5">
+                  <Button
+                    size="sm"
+                    className={`w-full h-9 text-xs sm:text-sm ${
+                      alreadyMine
+                        ? "bg-green-900/30 text-green-400 border border-green-800 hover:bg-green-900/30 cursor-default"
+                        : "bg-accent text-accent-foreground hover:bg-accent/90"
+                    }`}
+                    disabled={alreadyMine || addingId === item.id}
+                    onClick={() => handleAddToInventory(item.id)}
+                  >
+                    {alreadyMine ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 mr-1" />
+                        Já no estoque
+                      </>
+                    ) : addingId === item.id ? (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" />
+                        Cadastrando...
+                      </>
+                    ) : (
+                      <>
+                        <PackagePlus className="w-3.5 h-3.5 mr-1" />
+                        Cadastrar no estoque
+                      </>
+                    )}
+                  </Button>
+                  <div className="flex gap-1.5">
                     <a
                       href={item.sourceUrl}
                       target="_blank"
@@ -321,6 +371,7 @@ export default function SupplierCatalog() {
                     >
                       <RefreshCw className={`w-3.5 h-3.5 ${refreshingId === item.id ? "animate-spin" : ""}`} />
                     </Button>
+                  </div>
                   </div>
                 </CardContent>
               </Card>
