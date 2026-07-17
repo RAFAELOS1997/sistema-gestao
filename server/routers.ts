@@ -5,7 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
 import { hashPassword, verifyPassword } from "./_core/password";
 import { sdk } from "./_core/sdk";
-import { fetchSupplierProductStatus, fetchSupplierProductImage, fetchSupplierListingPage } from "./_core/supplierScraper";
+import { fetchSupplierProductStatus, fetchSupplierProductImage, fetchSupplierListingPage, searchSupplierProducts } from "./_core/supplierScraper";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
@@ -60,6 +60,29 @@ import {
 } from "./db";
 
 // ─── Products Router ──────────────────────────────────────────────────────────
+
+// Compara nomes de produtos ignorando acento/maiúscula e diferenças de
+// palavras, pra casar produtos do estoque com itens do fornecedor.
+const normalizeProductName = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+const tokenizeProductName = (s: string) => normalizeProductName(s).split(" ").filter((w) => w.length > 1);
+// Cobertura: quanto das palavras do lado menor aparecem no lado maior.
+// Order-independente e tolera nomes com palavras a mais de um dos lados.
+// Exige pelo menos 2 palavras em comum pra evitar "falso positivo" por uma
+// única palavra genérica (ex.: só "GUIA" ou só "IMAGEM").
+const nameCoverage = (aTokens: string[], bTokens: string[]) => {
+  const aSet = new Set(aTokens);
+  const bSet = new Set(bTokens);
+  let shared = 0;
+  aSet.forEach((t) => { if (bSet.has(t)) shared++; });
+  if (shared < 2 && Math.min(aSet.size, bSet.size) > 1) return 0;
+  return shared / Math.min(aSet.size, bSet.size);
+};
 
 const productsRouter = router({
   list: protectedProcedure
@@ -222,27 +245,6 @@ const productsRouter = router({
   pullImagesFromOracle: protectedProcedure.mutation(async () => {
     await ensureProductImageColumn();
 
-    const normalize = (s: string) =>
-      s
-        .normalize("NFD")
-        .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
-        .toUpperCase()
-        .replace(/[^A-Z0-9]+/g, " ")
-        .trim();
-    const tokenize = (s: string) => normalize(s).split(" ").filter((w) => w.length > 1);
-    // Cobertura: quanto das palavras do lado menor aparecem no lado maior.
-    // Order-independente e tolera nomes com palavras a mais de um dos lados.
-    // Exige pelo menos 2 palavras em comum pra evitar "falso positivo" por uma
-    // única palavra genérica (ex.: só "GUIA" ou só "IMAGEM").
-    const coverage = (aTokens: string[], bTokens: string[]) => {
-      const aSet = new Set(aTokens);
-      const bSet = new Set(bTokens);
-      let shared = 0;
-      aSet.forEach((t) => { if (bSet.has(t)) shared++; });
-      if (shared < 2 && Math.min(aSet.size, bSet.size) > 1) return 0;
-      return shared / Math.min(aSet.size, bSet.size);
-    };
-
     const [allProducts, catalogItems] = await Promise.all([
       listProducts(true),
       listSupplierCatalog(),
@@ -251,26 +253,26 @@ const productsRouter = router({
     const catalogWithImage = catalogItems.filter((i) => !!i.imageUrl);
     const catalogExactByName = new Map<string, string>();
     for (const item of catalogWithImage) {
-      const key = normalize(item.name);
+      const key = normalizeProductName(item.name);
       if (!catalogExactByName.has(key)) catalogExactByName.set(key, item.imageUrl!);
     }
     const catalogTokenized = catalogWithImage.map((item) => ({
       name: item.name,
       imageUrl: item.imageUrl!,
-      tokens: tokenize(item.name),
+      tokens: tokenizeProductName(item.name),
     }));
     const catalogNoImageNormalized = new Set(
-      catalogItems.filter((i) => !i.imageUrl).map((i) => normalize(i.name))
+      catalogItems.filter((i) => !i.imageUrl).map((i) => normalizeProductName(i.name))
     );
 
     let updated = 0;
     let alreadyHadImage = 0;
-    const noCatalogEntry: string[] = [];
+    const noCatalogEntry: { productId: number; productName: string }[] = [];
     const catalogEntryMissingPhoto: string[] = [];
     const suggestions: { productId: number; productName: string; catalogName: string; imageUrl: string; score: number }[] = [];
 
     for (const product of allProducts) {
-      const normalizedProductName = normalize(product.name);
+      const normalizedProductName = normalizeProductName(product.name);
       const exact = catalogExactByName.get(normalizedProductName);
       if (exact) {
         if (product.imageUrl === exact) alreadyHadImage++;
@@ -284,10 +286,10 @@ const productsRouter = router({
       }
 
       // Sem correspondência exata: procura o item do catálogo mais parecido
-      const productTokens = tokenize(product.name);
+      const productTokens = tokenizeProductName(product.name);
       let best: { name: string; imageUrl: string; score: number } | null = null;
       for (const candidate of catalogTokenized) {
-        const score = coverage(productTokens, candidate.tokens);
+        const score = nameCoverage(productTokens, candidate.tokens);
         if (!best || score > best.score) best = { name: candidate.name, imageUrl: candidate.imageUrl, score };
       }
 
@@ -303,12 +305,59 @@ const productsRouter = router({
         // Parecido mas arriscado — fica pra revisão manual
         suggestions.push({ productId: product.id, productName: product.name, catalogName: best.name, imageUrl: best.imageUrl, score: best.score });
       } else {
-        noCatalogEntry.push(product.name);
+        noCatalogEntry.push({ productId: product.id, productName: product.name });
       }
     }
 
     return { updated, alreadyHadImage, noCatalogEntry, catalogEntryMissingPhoto, suggestions };
   }),
+
+  // Busca as fotos direto no site do fornecedor (pesquisa por nome), pra quem
+  // não achou correspondência n'O Oráculo — o catálogo local pode não ter
+  // aquele produto ainda. Processa em lotes (parâmetro offset) pra não travar
+  // numa chamada só.
+  pullImagesFromSupplierSite: protectedProcedure
+    .input(z.object({ productIds: z.array(z.number().int().positive()).min(1) }))
+    .mutation(async ({ input }) => {
+      await ensureProductImageColumn();
+
+      const allProducts = await listProducts(true);
+      const targets = allProducts.filter((p) => input.productIds.includes(p.id));
+
+      let updated = 0;
+      const suggestions: { productId: number; productName: string; catalogName: string; imageUrl: string; score: number }[] = [];
+      const noResults: string[] = [];
+
+      for (const product of targets) {
+        const productTokens = tokenizeProductName(product.name);
+
+        let results = await searchSupplierProducts(product.name);
+        if (results.length === 0 && productTokens.length > 2) {
+          // Nome completo não achou nada — tenta só as 2 primeiras palavras
+          // (geralmente o núcleo do produto, ex. "GUIA MIÇANGA")
+          results = await searchSupplierProducts(productTokens.slice(0, 2).join(" "));
+        }
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        const withImage = results.filter((r) => !!r.imageUrl);
+        let best: { name: string; imageUrl: string; score: number } | null = null;
+        for (const candidate of withImage) {
+          const score = nameCoverage(productTokens, tokenizeProductName(candidate.name));
+          if (!best || score > best.score) best = { name: candidate.name, imageUrl: candidate.imageUrl!, score };
+        }
+
+        if (best && best.score >= 0.85) {
+          await updateProduct(product.id, { imageUrl: best.imageUrl });
+          updated++;
+        } else if (best && best.score >= 0.4) {
+          suggestions.push({ productId: product.id, productName: product.name, catalogName: best.name, imageUrl: best.imageUrl, score: best.score });
+        } else {
+          noResults.push(product.name);
+        }
+      }
+
+      return { updated, suggestions, noResults };
+    }),
 
   applyImageSuggestions: protectedProcedure
     .input(

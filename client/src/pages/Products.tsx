@@ -53,6 +53,9 @@ export default function Products() {
     { productId: number; productName: string; catalogName: string; imageUrl: string; score: number }[]
   >([]);
   const [dismissedSuggestions, setDismissedSuggestions] = useState<Set<number>>(new Set());
+  const [noCatalogEntry, setNoCatalogEntry] = useState<{ productId: number; productName: string }[]>([]);
+  const [searchingSupplierSite, setSearchingSupplierSite] = useState(false);
+  const [supplierSearchProgress, setSupplierSearchProgress] = useState("");
 
   const utils = trpc.useUtils();
   const { data: products, isLoading } = trpc.products.list.useQuery({ includeInactive: showInactive });
@@ -73,6 +76,7 @@ export default function Products() {
   });
   const pullImagesMutation = trpc.products.pullImagesFromOracle.useMutation();
   const applySuggestionsMutation = trpc.products.applyImageSuggestions.useMutation();
+  const pullFromSiteMutation = trpc.products.pullImagesFromSupplierSite.useMutation();
 
   const handlePullImages = async () => {
     setPullingImages(true);
@@ -81,12 +85,13 @@ export default function Products() {
       await utils.products.list.invalidate();
       setImageSuggestions(result.suggestions);
       setDismissedSuggestions(new Set());
+      setNoCatalogEntry(result.noCatalogEntry);
 
       const parts: string[] = [];
       if (result.updated > 0) parts.push(`${result.updated} foto(s) atualizada(s) automaticamente`);
       if (result.suggestions.length > 0) parts.push(`${result.suggestions.length} sugestão(ões) pra você revisar abaixo`);
       if (result.catalogEntryMissingPhoto.length > 0) parts.push(`${result.catalogEntryMissingPhoto.length} produto(s) existem no Oráculo mas ainda sem foto lá (use "Buscar fotos faltando" no Oráculo)`);
-      if (result.noCatalogEntry.length > 0) parts.push(`${result.noCatalogEntry.length} produto(s) não encontrados no Oráculo`);
+      if (result.noCatalogEntry.length > 0) parts.push(`${result.noCatalogEntry.length} produto(s) não encontrados no Oráculo — dá pra tentar buscar direto no site do fornecedor abaixo`);
 
       if (parts.length === 0) toast.success("Todos os produtos já têm foto atualizada!");
       else toast.success(parts.join(". ") + ".");
@@ -94,6 +99,41 @@ export default function Products() {
       toast.error(error?.message ?? "Erro ao puxar fotos do Oráculo");
     } finally {
       setPullingImages(false);
+    }
+  };
+
+  const handleSearchSupplierSite = async () => {
+    if (noCatalogEntry.length === 0) return;
+    setSearchingSupplierSite(true);
+    const CHUNK = 10;
+    let totalUpdated = 0;
+    const allSuggestions: typeof imageSuggestions = [];
+    const stillNotFound: { productId: number; productName: string }[] = [];
+    try {
+      for (let i = 0; i < noCatalogEntry.length; i += CHUNK) {
+        const chunk = noCatalogEntry.slice(i, i + CHUNK);
+        setSupplierSearchProgress(`${Math.min(i + CHUNK, noCatalogEntry.length)}/${noCatalogEntry.length}`);
+        const result = await pullFromSiteMutation.mutateAsync({ productIds: chunk.map((c) => c.productId) });
+        totalUpdated += result.updated;
+        allSuggestions.push(...result.suggestions);
+        for (const name of result.noResults) {
+          const found = chunk.find((c) => c.productName === name);
+          if (found) stillNotFound.push(found);
+        }
+      }
+      await utils.products.list.invalidate();
+      setImageSuggestions((prev) => [...prev, ...allSuggestions]);
+      setNoCatalogEntry(stillNotFound);
+      toast.success(
+        `${totalUpdated} foto(s) encontrada(s) direto no site! ` +
+        (allSuggestions.length > 0 ? `${allSuggestions.length} sugestão(ões) pra revisar. ` : "") +
+        (stillNotFound.length > 0 ? `${stillNotFound.length} produto(s) não encontrados nem no site do fornecedor.` : "")
+      );
+    } catch (error: any) {
+      toast.error(error?.message ?? "Erro ao buscar no site do fornecedor");
+    } finally {
+      setSearchingSupplierSite(false);
+      setSupplierSearchProgress("");
     }
   };
 
@@ -364,7 +404,7 @@ export default function Products() {
                   <img src={s.imageUrl} alt={s.catalogName} className="w-12 h-12 rounded object-cover border border-border shrink-0" loading="lazy" />
                   <div className="min-w-0 flex-1">
                     <p className="text-sm text-foreground font-medium truncate">{s.productName}</p>
-                    <p className="text-xs text-muted-foreground truncate">Oráculo: {s.catalogName}</p>
+                    <p className="text-xs text-muted-foreground truncate">Parecido com: {s.catalogName}</p>
                   </div>
                   <Button
                     size="sm"
@@ -383,6 +423,34 @@ export default function Products() {
                   </Button>
                 </div>
               ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {noCatalogEntry.length > 0 && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-foreground">
+              {noCatalogEntry.length} produto(s) sem foto e sem correspondência no Oráculo
+            </CardTitle>
+            <CardDescription>
+              Esses produtos não estão (ou não batem pelo nome) no seu catálogo do Oráculo. Dá pra buscar a foto direto na busca do site do fornecedor.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Button
+              onClick={handleSearchSupplierSite}
+              disabled={searchingSupplierSite}
+              className="bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              {searchingSupplierSite
+                ? `Buscando no site do fornecedor... ${supplierSearchProgress}`
+                : `Buscar direto no site do fornecedor (${noCatalogEntry.length})`}
+            </Button>
+            <p className="text-xs text-muted-foreground">
+              {noCatalogEntry.slice(0, 8).map((p) => p.productName).join(", ")}
+              {noCatalogEntry.length > 8 ? `, +${noCatalogEntry.length - 8} outro(s)` : ""}
+            </p>
           </CardContent>
         </Card>
       )}

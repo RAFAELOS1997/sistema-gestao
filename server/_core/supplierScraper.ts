@@ -54,23 +54,7 @@ export type SupplierListingItem = {
 
 const SUPPLIER_BASE = "https://www.atacadodeumbanda.com.br/";
 
-export async function fetchSupplierListingPage(
-  categoryPath: string,
-  page: number
-): Promise<SupplierListingItem[]> {
-  const sep = categoryPath.includes("?") ? "&" : "?";
-  const url = page === 1
-    ? `${SUPPLIER_BASE}${categoryPath}`
-    : `${SUPPLIER_BASE}${categoryPath}${sep}pagina=${page}`;
-
-  const response = await fetch(url, {
-    headers: {
-      "user-agent": "Mozilla/5.0 (compatible; TocaDaPanteraCatalogBot/1.0)",
-    },
-  });
-  if (!response.ok) return [];
-
-  const html = await response.text();
+function parseListingItems(html: string): SupplierListingItem[] {
   const items: SupplierListingItem[] = [];
   const blockRe = /<div class="listagem-item prod-id-(\d+)[^"]*"[\s\S]*?(?=<div class="listagem-item prod-id-|<\/ul>)/g;
   let m: RegExpExecArray | null;
@@ -89,6 +73,39 @@ export async function fetchSupplierListingPage(
     });
   }
   return items;
+}
+
+export async function fetchSupplierListingPage(
+  categoryPath: string,
+  page: number
+): Promise<SupplierListingItem[]> {
+  const sep = categoryPath.includes("?") ? "&" : "?";
+  const url = page === 1
+    ? `${SUPPLIER_BASE}${categoryPath}`
+    : `${SUPPLIER_BASE}${categoryPath}${sep}pagina=${page}`;
+
+  const response = await fetch(url, {
+    headers: {
+      "user-agent": "Mozilla/5.0 (compatible; TocaDaPanteraCatalogBot/1.0)",
+    },
+  });
+  if (!response.ok) return [];
+
+  return parseListingItems(await response.text());
+}
+
+// Busca produtos direto na busca do site do fornecedor (usado quando o nome
+// do produto não bate com nada já importado no catálogo local).
+export async function searchSupplierProducts(query: string): Promise<SupplierListingItem[]> {
+  const url = `${SUPPLIER_BASE}buscar?q=${encodeURIComponent(query)}`;
+  const response = await fetch(url, {
+    headers: {
+      "user-agent": "Mozilla/5.0 (compatible; TocaDaPanteraCatalogBot/1.0)",
+    },
+  });
+  if (!response.ok) return [];
+
+  return parseListingItems(await response.text());
 }
 
 // Busca a foto principal de um produto direto na página do fornecedor
