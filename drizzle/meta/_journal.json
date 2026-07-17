@@ -71,6 +71,13 @@
       "when": 1784258693208,
       "tag": "0009_ambiguous_thena",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1784317280295,
+      "tag": "0010_fearless_sister_grimm",
+      "breakpoints": true
     }
   ]
 }

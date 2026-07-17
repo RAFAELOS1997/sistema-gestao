@@ -13,6 +13,7 @@ import {
   createSale,
   createPurchase,
   updatePurchase,
+  ensureProductImageColumn,
   deleteProduct,
   deactivateProduct,
   reactivateProduct,
@@ -213,6 +214,52 @@ const productsRouter = router({
       }
       return { productsUpdated, purchasesUpdated };
     }),
+
+  // Puxa as fotos dos produtos do estoque a partir dos itens equivalentes
+  // já cadastrados n'O Oráculo (casando pelo nome, ignorando acento/maiúscula).
+  pullImagesFromOracle: protectedProcedure.mutation(async () => {
+    await ensureProductImageColumn();
+
+    const normalize = (s: string) =>
+      s
+        .normalize("NFD")
+        .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
+        .toUpperCase()
+        .replace(/[^A-Z0-9]+/g, " ")
+        .trim();
+
+    const [allProducts, catalogItems] = await Promise.all([
+      listProducts(true),
+      listSupplierCatalog(),
+    ]);
+
+    const catalogByName = new Map<string, string>();
+    for (const item of catalogItems) {
+      if (!item.imageUrl) continue;
+      const key = normalize(item.name);
+      if (!catalogByName.has(key)) catalogByName.set(key, item.imageUrl);
+    }
+
+    let updated = 0;
+    let alreadyHadImage = 0;
+    const unmatched: string[] = [];
+
+    for (const product of allProducts) {
+      const match = catalogByName.get(normalize(product.name));
+      if (!match) {
+        unmatched.push(product.name);
+        continue;
+      }
+      if (product.imageUrl === match) {
+        alreadyHadImage++;
+        continue;
+      }
+      await updateProduct(product.id, { imageUrl: match });
+      updated++;
+    }
+
+    return { updated, alreadyHadImage, unmatched };
+  }),
 
   deactivate: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))

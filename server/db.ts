@@ -88,6 +88,22 @@ export async function updateProduct(id: number, data: Partial<Omit<InsertProduct
   await db.update(products).set(data).where(eq(products.id, id));
 }
 
+// Migração pontual: garante que a coluna imageUrl exista em products.
+// Idempotente — pode ser chamada quantas vezes for preciso.
+export async function ensureProductImageColumn() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  try {
+    await db.execute(sql`ALTER TABLE products ADD COLUMN imageUrl TEXT`);
+    return { added: true };
+  } catch (error: any) {
+    if (error?.code === "ER_DUP_FIELDNAME" || /duplicate column/i.test(error?.message ?? "")) {
+      return { added: false };
+    }
+    throw error;
+  }
+}
+
 export async function getProductById(id: number) {
   const db = await getDb();
   if (!db) return undefined;

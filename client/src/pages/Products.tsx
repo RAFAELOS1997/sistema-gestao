@@ -10,7 +10,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
 import { Switch } from "@/components/ui/switch";
-import { Edit2, Package, Plus, Trash2, Eye, EyeOff, Search } from "lucide-react";
+import { Edit2, Package, Plus, Trash2, Eye, EyeOff, Search, ImageDown } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
 
@@ -48,6 +48,7 @@ export default function Products() {
   const [showInactive, setShowInactive] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("todas");
+  const [pullingImages, setPullingImages] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: products, isLoading } = trpc.products.list.useQuery({ includeInactive: showInactive });
@@ -66,6 +67,29 @@ export default function Products() {
   const reactivateMutation = trpc.products.reactivate.useMutation({
     onSuccess: () => { utils.products.list.invalidate(); utils.analytics.dashboard.invalidate(); utils.analytics.byCategory.invalidate(); },
   });
+  const pullImagesMutation = trpc.products.pullImagesFromOracle.useMutation();
+
+  const handlePullImages = async () => {
+    setPullingImages(true);
+    try {
+      const result = await pullImagesMutation.mutateAsync();
+      await utils.products.list.invalidate();
+      if (result.updated === 0 && result.unmatched.length === 0) {
+        toast.success("Todos os produtos já têm foto atualizada!");
+      } else {
+        toast.success(
+          `${result.updated} foto(s) atualizada(s)! ` +
+          (result.unmatched.length > 0
+            ? `${result.unmatched.length} produto(s) sem correspondência no Oráculo.`
+            : "")
+        );
+      }
+    } catch (error: any) {
+      toast.error(error?.message ?? "Erro ao puxar fotos do Oráculo");
+    } finally {
+      setPullingImages(false);
+    }
+  };
 
   // Cálculo de margem em tempo real (corrigido: parseFloat)
   const costPriceCents = Math.round(parseFloat(formData.costPrice || "0") * 100);
@@ -173,11 +197,22 @@ export default function Products() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-3">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Gestão de Produtos</h1>
           <p className="text-muted-foreground mt-1">Cadastre e gerencie seus produtos místicos</p>
         </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            onClick={handlePullImages}
+            disabled={pullingImages}
+            className="border-accent/30 text-accent hover:bg-accent/10"
+            title="Copia as fotos dos produtos equivalentes cadastrados n'O Oráculo"
+          >
+            <ImageDown className={`w-4 h-4 mr-2 ${pullingImages ? "animate-bounce" : ""}`} />
+            {pullingImages ? "Puxando fotos..." : "Puxar fotos do Oráculo"}
+          </Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button onClick={openCreate} className="bg-accent text-accent-foreground hover:bg-accent/90">
@@ -293,6 +328,7 @@ export default function Products() {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       <Card className="bg-card border-border">
@@ -368,11 +404,20 @@ export default function Products() {
                 const lowStock = product.currentStock <= product.minimumStock;
                 return (
                   <div key={product.id} className="p-3 bg-background rounded-lg border border-border space-y-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="font-medium text-foreground text-sm leading-snug">{product.name}</p>
-                      <Badge variant={product.isActive === 1 ? "default" : "secondary"} className={`shrink-0 text-[10px] ${product.isActive === 1 ? "bg-green-900/40 text-green-400 border-green-700" : "bg-red-900/40 text-red-400 border-red-700"}`}>
-                        {product.isActive === 1 ? "Ativo" : "Inativo"}
-                      </Badge>
+                    <div className="flex items-start gap-2">
+                      {product.imageUrl ? (
+                        <img src={product.imageUrl} alt={product.name} className="w-12 h-12 rounded object-cover shrink-0 border border-border" loading="lazy" />
+                      ) : (
+                        <div className="w-12 h-12 rounded shrink-0 border border-border bg-card flex items-center justify-center">
+                          <Package className="w-5 h-5 text-muted-foreground opacity-40" />
+                        </div>
+                      )}
+                      <div className="flex-1 flex items-start justify-between gap-2 min-w-0">
+                        <p className="font-medium text-foreground text-sm leading-snug">{product.name}</p>
+                        <Badge variant={product.isActive === 1 ? "default" : "secondary"} className={`shrink-0 text-[10px] ${product.isActive === 1 ? "bg-green-900/40 text-green-400 border-green-700" : "bg-red-900/40 text-red-400 border-red-700"}`}>
+                          {product.isActive === 1 ? "Ativo" : "Inativo"}
+                        </Badge>
+                      </div>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <Badge variant="outline" className="border-accent/40 text-accent text-[10px]">
@@ -450,6 +495,7 @@ export default function Products() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
+                    <TableHead className="text-accent font-semibold w-14"></TableHead>
                     <TableHead className="text-accent font-semibold">Nome</TableHead>
                     <TableHead className="text-accent font-semibold">Categoria</TableHead>
                     <TableHead className="text-accent font-semibold text-right">Custo</TableHead>
@@ -468,6 +514,15 @@ export default function Products() {
                     const lowStock = product.currentStock <= product.minimumStock;
                     return (
                       <TableRow key={product.id} className="border-border hover:bg-background/50">
+                        <TableCell>
+                          {product.imageUrl ? (
+                            <img src={product.imageUrl} alt={product.name} className="w-10 h-10 rounded object-cover border border-border" loading="lazy" />
+                          ) : (
+                            <div className="w-10 h-10 rounded border border-border bg-background flex items-center justify-center">
+                              <Package className="w-4 h-4 text-muted-foreground opacity-40" />
+                            </div>
+                          )}
+                        </TableCell>
                         <TableCell className="font-medium text-foreground">{product.name}</TableCell>
                         <TableCell>
                           <Badge variant="outline" className="border-accent/40 text-accent">

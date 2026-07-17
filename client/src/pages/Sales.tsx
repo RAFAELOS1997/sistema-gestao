@@ -312,8 +312,12 @@ export default function Sales() {
                         : "border-border hover:border-accent hover:bg-background"
                     }`}
                   >
-                    <div className="mb-2 h-24 bg-background rounded flex items-center justify-center text-muted-foreground text-sm relative">
-                      {product.category.toUpperCase()}
+                    <div className="mb-2 h-24 bg-background rounded flex items-center justify-center text-muted-foreground text-sm relative overflow-hidden">
+                      {product.imageUrl ? (
+                        <img src={product.imageUrl} alt={product.name} className="w-full h-full object-cover" loading="lazy" />
+                      ) : (
+                        product.category.toUpperCase()
+                      )}
                       {outOfStock && (
                         <div className="absolute inset-0 bg-background/80 rounded flex items-center justify-center">
                           <span className="text-xs font-bold text-destructive flex items-center gap-1">
