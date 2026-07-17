@@ -1,9 +1,10 @@
 import { and, eq, gte, lte, sql, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { 
+import {
   InsertUser, InsertProduct, InsertSale, InsertPurchase, InsertSupplier, InsertProductSupplier,
   products, sales, users, purchases, suppliers, productSuppliers,
-  roles, permissions, rolePermissions, userRoles, auditLog, systemConfig
+  roles, permissions, rolePermissions, userRoles, auditLog, systemConfig,
+  supplierCatalog, InsertSupplierCatalogItem,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -521,4 +522,54 @@ export async function getReceiptByNumber(receiptNumber: number) {
   if (!db) return null;
   const result = await db.select().from(receipts).where(eq(receipts.receiptNumber, receiptNumber)).limit(1);
   return result[0] || null;
+}
+
+// ─── Supplier Catalog ──────────────────────────────────────────────────────
+
+export async function listSupplierCatalog(supplierId?: number) {
+  const db = await getDb();
+  if (!db) return [];
+  if (supplierId) {
+    return await db.select().from(supplierCatalog).where(eq(supplierCatalog.supplierId, supplierId)).orderBy(supplierCatalog.name);
+  }
+  return await db.select().from(supplierCatalog).orderBy(supplierCatalog.name);
+}
+
+export async function getSupplierCatalogItem(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(supplierCatalog).where(eq(supplierCatalog.id, id)).limit(1);
+  return result[0] || null;
+}
+
+export async function createSupplierCatalogItem(data: InsertSupplierCatalogItem) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return await db.insert(supplierCatalog).values(data);
+}
+
+export async function createSupplierCatalogBatch(items: InsertSupplierCatalogItem[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (items.length === 0) return { count: 0 };
+  const CHUNK = 50;
+  for (let i = 0; i < items.length; i += CHUNK) {
+    await db.insert(supplierCatalog).values(items.slice(i, i + CHUNK));
+  }
+  return { count: items.length };
+}
+
+export async function updateSupplierCatalogItem(
+  id: number,
+  data: Partial<{ price: number; suggestedSalePrice: number; stockStatus: "disponivel" | "indisponivel" | "desconhecido"; lastCheckedAt: Date }>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(supplierCatalog).set(data).where(eq(supplierCatalog.id, id));
+}
+
+export async function deleteSupplierCatalogItem(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(supplierCatalog).where(eq(supplierCatalog.id, id));
 }

@@ -5,6 +5,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
 import { hashPassword, verifyPassword } from "./_core/password";
 import { sdk } from "./_core/sdk";
+import { fetchSupplierProductStatus } from "./_core/supplierScraper";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
 import {
@@ -50,6 +51,11 @@ import {
   createReceipt,
   listReceipts,
   getReceiptByNumber,
+  listSupplierCatalog,
+  getSupplierCatalogItem,
+  createSupplierCatalogBatch,
+  updateSupplierCatalogItem,
+  deleteSupplierCatalogItem,
 } from "./db";
 
 // ─── Products Router ──────────────────────────────────────────────────────────
@@ -536,105 +542,6 @@ const analyticsRouter = router({
     .query(({ input }) => getAnalyticsByCategory(input.startDate, input.endDate)),
 });
 
-// ─── Oracle Router (LLM Market Analysis) ───────────────────────────────────────
-
-const oracleRouter = router({
-  consult: protectedProcedure
-    .input(
-      z.object({
-        category: z.enum(["umbanda", "candomble", "quimbanda", "catolicismo", "geral"]).optional(),
-      })
-    )
-    .mutation(async ({ input }) => {
-      const categoryName = input.category
-        ? {
-            umbanda: "Umbanda (itens rituais e orixás)",
-            candomble: "Candomblé (itens sagrados e guias)",
-            quimbanda: "Quimbanda (talismãs e objetos)",
-            catolicismo: "Catolicismo (santos e rosários)",
-            geral: "artigos religiosos em geral",
-          }[input.category]
-        : "artigos religiosos em geral";
-
-      const prompt = `Você é um especialista em mercado de artigos religiosos brasileiros. Analise o mercado de ${categoryName} e forneça uma análise estruturada com:
-
-1. **Top 3 Produtos Recomendados**: Produtos com melhor potencial de lucro
-2. **Margem Estimada**: Percentual de lucro esperado (30-80%)
-3. **Score de Oportunidade**: 0-100 indicando potencial
-4. **Tendência de Demanda**: Alta, Média ou Baixa
-5. **Insights de Mercado**: 2-3 observações sobre o mercado
-
-Forneça a resposta em JSON estruturado.`;
-
-      try {
-        const response = await invokeLLM({
-          messages: [
-            {
-              role: "system",
-              content:
-                "Você é um especialista em análise de mercado de artigos religiosos. Forneça análises precisas e baseadas em dados reais do mercado brasileiro.",
-            },
-            {
-              role: "user",
-              content: prompt,
-            },
-          ],
-          response_format: {
-            type: "json_schema",
-            json_schema: {
-              name: "market_analysis",
-              strict: true,
-              schema: {
-                type: "object",
-                properties: {
-                  topProducts: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        name: { type: "string", description: "Nome do produto" },
-                        description: { type: "string", description: "Descrição breve" },
-                        estimatedMargin: { type: "number", description: "Margem estimada em %" },
-                      },
-                      required: ["name", "description", "estimatedMargin"],
-                      additionalProperties: false,
-                    },
-                    minItems: 3,
-                    maxItems: 3,
-                  },
-                  overallMargin: { type: "number", description: "Margem geral estimada em %" },
-                  opportunityScore: { type: "number", description: "Score de 0-100" },
-                  demandTrend: {
-                    type: "string",
-                    enum: ["Alta", "Média", "Baixa"],
-                    description: "Tendência de demanda",
-                  },
-                  marketInsights: {
-                    type: "array",
-                    items: { type: "string" },
-                    minItems: 2,
-                    maxItems: 3,
-                  },
-                },
-                required: ["topProducts", "overallMargin", "opportunityScore", "demandTrend", "marketInsights"],
-                additionalProperties: false,
-              },
-            },
-          },
-        });
-
-        const content = response.choices[0]?.message.content;
-        if (!content) throw new Error("No response from LLM");
-
-        const analysis = JSON.parse(typeof content === "string" ? content : JSON.stringify(content));
-        return analysis;
-      } catch (error) {
-        console.error("[Oracle] LLM Error:", error);
-        throw new Error("Falha ao consultar o Oráculo. Tente novamente.");
-      }
-    }),
-});
-
 // ─── Settings Router ────────────────────────────────────────────────────────────
 
 const settingsRouter = router({
@@ -811,6 +718,86 @@ const suppliersRouter = router({
     .mutation(({ input }) => createProductSupplier(input)),
 });
 
+// ─── Supplier Catalog Router ──────────────────────────────────────────────────
+// Catálogo de produtos consultados no site do fornecedor. Não é o mesmo que o
+// estoque próprio (tabela `products`) — é uma referência pra decidir o que
+// pedir e a que preço revender.
+
+const CATALOG_CATEGORY = z.enum(["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"]);
+
+const suggestSalePrice = (costCents: number) => {
+  if (costCents <= 500) return Math.round(costCents * 3);
+  if (costCents <= 2000) return Math.round(costCents * 2.5);
+  if (costCents <= 5000) return Math.round(costCents * 2);
+  return Math.round(costCents * 1.8);
+};
+
+const supplierCatalogRouter = router({
+  list: protectedProcedure
+    .input(z.object({ supplierId: z.number().int().positive().optional() }))
+    .query(({ input }) => listSupplierCatalog(input.supplierId)),
+
+  createBatch: protectedProcedure
+    .input(
+      z.object({
+        supplierId: z.number().int().positive(),
+        items: z
+          .array(
+            z.object({
+              name: z.string().min(1),
+              category: CATALOG_CATEGORY,
+              sourceSlug: z.string().min(1),
+              sourceUrl: z.string().min(1),
+              imageUrl: z.string().optional(),
+              price: z.number().int().positive(),
+            })
+          )
+          .min(1),
+      })
+    )
+    .mutation(({ input }) =>
+      createSupplierCatalogBatch(
+        input.items.map((item) => ({
+          supplierId: input.supplierId,
+          name: item.name,
+          category: item.category,
+          sourceSlug: item.sourceSlug,
+          sourceUrl: item.sourceUrl,
+          imageUrl: item.imageUrl,
+          price: item.price,
+          suggestedSalePrice: suggestSalePrice(item.price),
+        }))
+      )
+    ),
+
+  refresh: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input }) => {
+      const item = await getSupplierCatalogItem(input.id);
+      if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado" });
+
+      const status = await fetchSupplierProductStatus(item.sourceUrl);
+      const updates: Parameters<typeof updateSupplierCatalogItem>[1] = {
+        stockStatus: status.stockStatus,
+        lastCheckedAt: new Date(),
+      };
+      if (status.price !== null) {
+        updates.price = status.price;
+        updates.suggestedSalePrice = suggestSalePrice(status.price);
+      }
+      await updateSupplierCatalogItem(input.id, updates);
+      return getSupplierCatalogItem(input.id);
+    }),
+
+  updateSuggestedPrice: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), suggestedSalePrice: z.number().int().positive() }))
+    .mutation(({ input }) => updateSupplierCatalogItem(input.id, { suggestedSalePrice: input.suggestedSalePrice })),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(({ input }) => deleteSupplierCatalogItem(input.id)),
+});
+
 // ─── Users Router ────────────────────────────────────────────────────────────
 
 const usersRouter = router({
@@ -960,9 +947,9 @@ export const appRouter = router({
   purchases: purchasesRouter,
   sales: salesRouter,
   analytics: analyticsRouter,
-  oracle: oracleRouter,
   settings: settingsRouter,
   suppliers: suppliersRouter,
+  supplierCatalog: supplierCatalogRouter,
   users: usersRouter,
   receipts: receiptsRouter,
 });

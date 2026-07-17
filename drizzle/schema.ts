@@ -183,6 +183,27 @@ export const auditLog = mysqlTable("auditLog", {
 export type AuditLog = typeof auditLog.$inferSelect;
 export type InsertAuditLog = typeof auditLog.$inferInsert;
 
+// ─── Supplier Catalog (Catálogo de Fornecedores) ──────────────────────────────
+
+export const supplierCatalog = mysqlTable("supplierCatalog", {
+  id: int("id").autoincrement().primaryKey(),
+  supplierId: int("supplierId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  category: mysqlEnum("category", ["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"]).notNull(),
+  sourceSlug: varchar("sourceSlug", { length: 255 }).notNull(), // identificador único do produto no site do fornecedor
+  sourceUrl: text("sourceUrl").notNull(),
+  imageUrl: text("imageUrl"),
+  price: int("price").notNull(), // preço de atacado em centavos
+  suggestedSalePrice: int("suggestedSalePrice"), // sugestão calculada, em centavos
+  stockStatus: mysqlEnum("stockStatus", ["disponivel", "indisponivel", "desconhecido"]).default("desconhecido").notNull(),
+  lastCheckedAt: timestamp("lastCheckedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type SupplierCatalogItem = typeof supplierCatalog.$inferSelect;
+export type InsertSupplierCatalogItem = typeof supplierCatalog.$inferInsert;
+
 // ─── Receipts (Recibos) ──────────────────────────────────────────────────────
 
 export const receipts = mysqlTable("receipts", {

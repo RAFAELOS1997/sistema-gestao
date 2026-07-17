@@ -8,8 +8,8 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
-import OracleConsultation from "./pages/OracleConsultation";
 import PriceReview from "./pages/PriceReview";
+import SupplierCatalog from "./pages/SupplierCatalog";
 import Products from "./pages/Products";
 import Purchases from "./pages/Purchases";
 import Sales from "./pages/Sales";
@@ -59,9 +59,9 @@ function Router() {
           <Receipts />
         </DashboardLayout>
       </Route>
-      <Route path="/oracle">
+      <Route path="/catalogo-fornecedores">
         <DashboardLayout>
-          <OracleConsultation />
+          <SupplierCatalog />
         </DashboardLayout>
       </Route>
       <Route path="/settings">
