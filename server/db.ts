@@ -120,6 +120,114 @@ export async function ensureProductImageColumnIsMediumtext() {
   await db.execute(sql`ALTER TABLE products MODIFY COLUMN imageUrl MEDIUMTEXT`);
 }
 
+// Roda todas as migrações pendentes de forma seguríssima (idempotente) —
+// chamada uma vez no boot do servidor. Existe porque o `drizzle-kit migrate`
+// nunca roda sozinho no deploy da Hostinger, e normalmente não há acesso
+// direto ao banco (phpMyAdmin/SSH) a partir do ambiente onde o código é
+// escrito. CREATE TABLE IF NOT EXISTS já é idempotente por natureza; ADD
+// COLUMN usa o mesmo padrão de captura de "coluna duplicada" das funções
+// acima (drizzle-orm/mysql2 embrulha o erro real do driver em .cause).
+export async function runStartupMigrations() {
+  const db = await getDb();
+  if (!db) return;
+
+  const isDupColumn = (error: any) => {
+    const code = error?.code ?? error?.cause?.code;
+    const message = error?.message ?? error?.cause?.message ?? "";
+    return code === "ER_DUP_FIELDNAME" || /duplicate column/i.test(message);
+  };
+
+  try {
+    await db.execute(sql`ALTER TABLE products ADD COLUMN imageUrl TEXT`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] products.imageUrl:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE products MODIFY COLUMN imageUrl MEDIUMTEXT`);
+  } catch (error: any) {
+    console.error("[migrations] products.imageUrl mediumtext:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS terreiros (
+        id int AUTO_INCREMENT NOT NULL,
+        name varchar(255) NOT NULL,
+        username varchar(100) NOT NULL,
+        passwordHash varchar(255) NOT NULL,
+        contactName varchar(255),
+        phone varchar(20),
+        isActive int NOT NULL DEFAULT 1,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        lastSignedIn timestamp,
+        tierId int,
+        PRIMARY KEY (id),
+        UNIQUE KEY terreiros_username_unique (username)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] terreiros:", error);
+  }
+  // tierId pode não existir se a tabela já tiver sido criada por uma
+  // migração anterior sem essa coluna — tenta adicionar separado.
+  try {
+    await db.execute(sql`ALTER TABLE terreiros ADD COLUMN tierId int`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] terreiros.tierId:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS partnerTiers (
+        id int AUTO_INCREMENT NOT NULL,
+        name varchar(100) NOT NULL,
+        sortOrder int NOT NULL DEFAULT 0,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY partnerTiers_name_unique (name)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] partnerTiers:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS tierProductPrices (
+        id int AUTO_INCREMENT NOT NULL,
+        tierId int NOT NULL,
+        productId int NOT NULL,
+        price int NOT NULL,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] tierProductPrices:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS terreiroProductPrices (
+        id int AUTO_INCREMENT NOT NULL,
+        terreiroId int NOT NULL,
+        productId int NOT NULL,
+        price int NOT NULL,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] terreiroProductPrices:", error);
+  }
+
+  console.log("[migrations] Verificação de schema concluída.");
+}
+
 export async function getProductById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
