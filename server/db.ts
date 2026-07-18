@@ -1,10 +1,13 @@
-import { and, eq, gte, lte, sql, desc } from "drizzle-orm";
+import { and, eq, gte, lte, sql, desc, or, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, InsertProduct, InsertSale, InsertPurchase, InsertSupplier, InsertProductSupplier,
   products, sales, users, purchases, suppliers, productSuppliers,
   roles, permissions, rolePermissions, userRoles, auditLog, systemConfig,
   supplierCatalog, InsertSupplierCatalogItem,
+  terreiros, InsertTerreiro,
+  partnerTiers, InsertPartnerTier, tierProductPrices, InsertTierProductPrice,
+  terreiroProductPrices,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -601,4 +604,229 @@ export async function deleteSupplierCatalogItem(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(supplierCatalog).where(eq(supplierCatalog.id, id));
+}
+
+// ─── Terreiros Parceiros (Portal do Parceiro) ─────────────────────────────────
+
+export async function listTerreiros(includeInactive = false) {
+  const db = await getDb();
+  if (!db) return [];
+  if (includeInactive) return db.select().from(terreiros).orderBy(terreiros.name);
+  return db.select().from(terreiros).where(eq(terreiros.isActive, 1)).orderBy(terreiros.name);
+}
+
+export async function getTerreiroById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(terreiros).where(eq(terreiros.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function getTerreiroByUsername(username: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(terreiros).where(eq(terreiros.username, username)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function createTerreiro(data: Omit<InsertTerreiro, "id" | "createdAt" | "updatedAt" | "lastSignedIn">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getTerreiroByUsername(data.username);
+  if (existing) throw new Error("Já existe um login com esse nome de usuário");
+  return db.insert(terreiros).values(data);
+}
+
+export async function updateTerreiro(
+  id: number,
+  data: Partial<Omit<InsertTerreiro, "id" | "createdAt" | "updatedAt">>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (data.username) {
+    const existing = await getTerreiroByUsername(data.username);
+    if (existing && existing.id !== id) throw new Error("Já existe um login com esse nome de usuário");
+  }
+  await db.update(terreiros).set(data).where(eq(terreiros.id, id));
+}
+
+export async function setTerreiroActive(id: number, isActive: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(terreiros).set({ isActive: isActive ? 1 : 0 }).where(eq(terreiros.id, id));
+}
+
+export async function touchTerreiroLastSignedIn(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(terreiros).set({ lastSignedIn: new Date() }).where(eq(terreiros.id, id));
+}
+
+// Catálogo exposto no Portal do Parceiro: só produtos ativos com estoque, e
+// só os que têm preço cadastrado (preço específico do terreiro OU preço do
+// plano dele — produto sem nenhum dos dois fica escondido). O preço
+// específico do terreiro tem prioridade sobre o do plano. Nunca inclui custo.
+export async function listPartnerVisibleProducts(terreiroId: number, tierId: number | null) {
+  const db = await getDb();
+  if (!db) return [];
+  const tierJoinCondition = tierId
+    ? and(eq(tierProductPrices.productId, products.id), eq(tierProductPrices.tierId, tierId))
+    : sql`false`;
+  return db
+    .select({
+      id: products.id,
+      name: products.name,
+      category: products.category,
+      salePrice: sql<number>`coalesce(${terreiroProductPrices.price}, ${tierProductPrices.price})`,
+      currentStock: products.currentStock,
+      imageUrl: products.imageUrl,
+    })
+    .from(products)
+    .leftJoin(tierProductPrices, tierJoinCondition)
+    .leftJoin(
+      terreiroProductPrices,
+      and(eq(terreiroProductPrices.productId, products.id), eq(terreiroProductPrices.terreiroId, terreiroId))
+    )
+    .where(
+      and(
+        eq(products.isActive, 1),
+        gte(products.currentStock, 1),
+        or(isNotNull(tierProductPrices.price), isNotNull(terreiroProductPrices.price))
+      )
+    )
+    .orderBy(products.name);
+}
+
+// Preços de um terreiro específico: todos os produtos ativos, com o preço do
+// plano dele como referência e o preço específico (se sobrescrito). Usado na
+// página de gestão individual do terreiro.
+export async function listTerreiroProductPrices(terreiroId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const terreiro = await getTerreiroById(terreiroId);
+  const tierId = terreiro?.tierId ?? null;
+  const tierJoinCondition = tierId
+    ? and(eq(tierProductPrices.productId, products.id), eq(tierProductPrices.tierId, tierId))
+    : sql`false`;
+  return db
+    .select({
+      productId: products.id,
+      name: products.name,
+      category: products.category,
+      currentStock: products.currentStock,
+      tierPrice: tierProductPrices.price,
+      overridePrice: terreiroProductPrices.price,
+    })
+    .from(products)
+    .leftJoin(tierProductPrices, tierJoinCondition)
+    .leftJoin(
+      terreiroProductPrices,
+      and(eq(terreiroProductPrices.productId, products.id), eq(terreiroProductPrices.terreiroId, terreiroId))
+    )
+    .where(eq(products.isActive, 1))
+    .orderBy(products.name);
+}
+
+export async function setTerreiroProductPrice(terreiroId: number, productId: number, price: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db
+    .select({ id: terreiroProductPrices.id })
+    .from(terreiroProductPrices)
+    .where(and(eq(terreiroProductPrices.terreiroId, terreiroId), eq(terreiroProductPrices.productId, productId)))
+    .limit(1);
+  if (existing[0]) {
+    await db.update(terreiroProductPrices).set({ price }).where(eq(terreiroProductPrices.id, existing[0].id));
+  } else {
+    await db.insert(terreiroProductPrices).values({ terreiroId, productId, price });
+  }
+}
+
+export async function removeTerreiroProductPrice(terreiroId: number, productId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .delete(terreiroProductPrices)
+    .where(and(eq(terreiroProductPrices.terreiroId, terreiroId), eq(terreiroProductPrices.productId, productId)));
+}
+
+// ─── Planos de Parceria (Prata/Ouro/Diamante) ─────────────────────────────────
+
+export async function listPartnerTiers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(partnerTiers).orderBy(partnerTiers.sortOrder);
+}
+
+export async function getPartnerTierById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(partnerTiers).where(eq(partnerTiers.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function createPartnerTier(data: Omit<InsertPartnerTier, "id" | "createdAt" | "updatedAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(partnerTiers).values(data);
+}
+
+export async function updatePartnerTier(id: number, data: Partial<Omit<InsertPartnerTier, "id" | "createdAt" | "updatedAt">>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(partnerTiers).set(data).where(eq(partnerTiers.id, id));
+}
+
+export async function deletePartnerTier(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const inUse = await db.select({ id: terreiros.id }).from(terreiros).where(eq(terreiros.tierId, id)).limit(1);
+  if (inUse.length > 0) throw new Error("Existem terreiros nesse plano — mude o plano deles antes de excluir");
+  await db.delete(tierProductPrices).where(eq(tierProductPrices.tierId, id));
+  await db.delete(partnerTiers).where(eq(partnerTiers.id, id));
+}
+
+// Preços de um plano: todos os produtos ativos, com o preço do plano quando
+// já foi definido (null = ainda escondido pro terreiro daquele plano).
+export async function listTierProductPrices(tierId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      productId: products.id,
+      name: products.name,
+      category: products.category,
+      currentStock: products.currentStock,
+      price: tierProductPrices.price,
+    })
+    .from(products)
+    .leftJoin(
+      tierProductPrices,
+      and(eq(tierProductPrices.productId, products.id), eq(tierProductPrices.tierId, tierId))
+    )
+    .where(eq(products.isActive, 1))
+    .orderBy(products.name);
+}
+
+export async function setTierProductPrice(tierId: number, productId: number, price: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db
+    .select({ id: tierProductPrices.id })
+    .from(tierProductPrices)
+    .where(and(eq(tierProductPrices.tierId, tierId), eq(tierProductPrices.productId, productId)))
+    .limit(1);
+  if (existing[0]) {
+    await db.update(tierProductPrices).set({ price }).where(eq(tierProductPrices.id, existing[0].id));
+  } else {
+    await db.insert(tierProductPrices).values({ tierId, productId, price });
+  }
+}
+
+export async function removeTierProductPrice(tierId: number, productId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .delete(tierProductPrices)
+    .where(and(eq(tierProductPrices.tierId, tierId), eq(tierProductPrices.productId, productId)));
 }

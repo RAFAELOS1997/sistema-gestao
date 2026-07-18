@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, Package, PanelLeft, ShoppingCart, ShoppingBag, BarChart3, Settings, Truck, Users as UsersIcon, Receipt, ClipboardCheck, Sparkles } from "lucide-react";
+import { LayoutDashboard, LogOut, Package, PanelLeft, ShoppingCart, ShoppingBag, BarChart3, Settings, Truck, Users as UsersIcon, Receipt, ClipboardCheck, Sparkles, Handshake } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -37,6 +37,7 @@ const menuItems = [
   { icon: Receipt, label: "Recibos", path: "/receipts" },
   { icon: Truck, label: "Fornecedores", path: "/suppliers" },
   { icon: Sparkles, label: "O Oráculo", path: "/oraculo" },
+  { icon: Handshake, label: "Terreiros Parceiros", path: "/parceiros-terreiros" },
   { icon: UsersIcon, label: "Usuários", path: "/users" },
   { icon: Settings, label: "Configurações", path: "/settings" },
 ];
@@ -174,7 +175,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                       tooltip={item.label}
                       className={`h-10 transition-all font-normal rounded-lg ${
                         isActive
-                          ? "bg-accent/20 text-accent border border-accent/30"
+                          ? "!bg-accent/20 !text-accent border border-accent/30"
                           : "hover:bg-accent/10 text-foreground"
                       }`}
                     >

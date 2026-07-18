@@ -1,13 +1,19 @@
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import NotFound from "@/pages/NotFound";
-import { Route, Switch } from "wouter";
+import { Redirect, Route, Switch } from "wouter";
 import DashboardLayout from "./components/DashboardLayout";
 import ErrorBoundary from "./components/ErrorBoundary";
+import PortalLayout from "./components/portal/PortalLayout";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import Partners from "./pages/Partners";
+import PartnerDetail from "./pages/PartnerDetail";
+import PartnerTiers from "./pages/PartnerTiers";
+import PortalLogin from "./pages/portal/PortalLogin";
+import PortalProducts from "./pages/portal/PortalProducts";
 import PriceReview from "./pages/PriceReview";
 import SupplierCatalog from "./pages/SupplierCatalog";
 import AuditPedido7335 from "./pages/AuditPedido7335";
@@ -85,6 +91,31 @@ function Router() {
           <Users />
         </DashboardLayout>
       </Route>
+      <Route path="/parceiros-terreiros">
+        <DashboardLayout>
+          <Partners />
+        </DashboardLayout>
+      </Route>
+      <Route path="/parceiros-terreiros/:id">
+        <DashboardLayout>
+          <PartnerDetail />
+        </DashboardLayout>
+      </Route>
+      <Route path="/planos-parceria">
+        <DashboardLayout>
+          <PartnerTiers />
+        </DashboardLayout>
+      </Route>
+
+      {/* Portal do Parceiro — login e área separados dos usuários do sistema */}
+      <Route path="/parceiros" component={() => <Redirect to="/parceiros/produtos" />} />
+      <Route path="/parceiros/login" component={PortalLogin} />
+      <Route path="/parceiros/produtos">
+        <PortalLayout>
+          <PortalProducts />
+        </PortalLayout>
+      </Route>
+
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

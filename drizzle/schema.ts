@@ -221,3 +221,67 @@ export const receipts = mysqlTable("receipts", {
 
 export type Receipt = typeof receipts.$inferSelect;
 export type InsertReceipt = typeof receipts.$inferInsert;
+
+// ─── Terreiros Parceiros (Portal do Parceiro) ─────────────────────────────────
+// Login separado dos usuários do sistema (staff). Cada terreiro parceiro
+// recebe um usuário/senha cadastrado pelo admin e só acessa o portal
+// simplificado com os produtos em estoque e o preço de venda.
+
+export const terreiros = mysqlTable("terreiros", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(), // Nome do terreiro
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  contactName: varchar("contactName", { length: 255 }),
+  phone: varchar("phone", { length: 20 }),
+  tierId: int("tierId"), // plano de parceria (Prata/Ouro/Diamante) — define o preço que ele vê
+  isActive: int("isActive").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn"),
+});
+
+export type Terreiro = typeof terreiros.$inferSelect;
+export type InsertTerreiro = typeof terreiros.$inferInsert;
+
+// ─── Planos de Parceria (Prata/Ouro/Diamante) ─────────────────────────────────
+// Substituem o preço único: cada terreiro sobe de plano por mérito (volume de
+// compra) e cada plano tem seu próprio preço por produto. Produto sem preço
+// cadastrado no plano do terreiro fica escondido pra ele.
+
+export const partnerTiers = mysqlTable("partnerTiers", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull().unique(),
+  sortOrder: int("sortOrder").notNull().default(0), // menor = plano mais básico
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PartnerTier = typeof partnerTiers.$inferSelect;
+export type InsertPartnerTier = typeof partnerTiers.$inferInsert;
+
+export const tierProductPrices = mysqlTable("tierProductPrices", {
+  id: int("id").autoincrement().primaryKey(),
+  tierId: int("tierId").notNull(),
+  productId: int("productId").notNull(),
+  price: int("price").notNull(), // em centavos — preço desse produto nesse plano
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TierProductPrice = typeof tierProductPrices.$inferSelect;
+export type InsertTierProductPrice = typeof tierProductPrices.$inferInsert;
+
+// Sobrescreve o preço do plano só pra um terreiro específico (ex: negociação
+// pontual). Quando existe, tem prioridade sobre o preço do plano dele.
+export const terreiroProductPrices = mysqlTable("terreiroProductPrices", {
+  id: int("id").autoincrement().primaryKey(),
+  terreiroId: int("terreiroId").notNull(),
+  productId: int("productId").notNull(),
+  price: int("price").notNull(), // em centavos
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TerreiroProductPrice = typeof terreiroProductPrices.$inferSelect;
+export type InsertTerreiroProductPrice = typeof terreiroProductPrices.$inferInsert;
