@@ -60,6 +60,7 @@ import {
   updateSupplierCatalogItem,
   deleteSupplierCatalogItem,
   listTerreiros,
+  getTerreiroById,
   getTerreiroByUsername,
   createTerreiro,
   updateTerreiro,
@@ -74,6 +75,9 @@ import {
   listTierProductPrices,
   setTierProductPrice,
   removeTierProductPrice,
+  listTerreiroProductPrices,
+  setTerreiroProductPrice,
+  removeTerreiroProductPrice,
 } from "./db";
 
 // ─── Products Router ──────────────────────────────────────────────────────────
@@ -1300,6 +1304,10 @@ const terreirosRouter = router({
     .input(z.object({ includeInactive: z.boolean().optional() }).optional())
     .query(({ input }) => listTerreiros(input?.includeInactive ?? false)),
 
+  getById: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .query(({ input }) => getTerreiroById(input.id)),
+
   create: protectedProcedure
     .input(
       z.object({
@@ -1369,6 +1377,22 @@ const terreirosRouter = router({
       });
       return { success: true };
     }),
+
+  // Preço específico de um terreiro — sobrescreve o preço do plano dele
+  // só pra esse produto (ex: negociação pontual com aquele parceiro).
+  prices: router({
+    list: protectedProcedure
+      .input(z.object({ terreiroId: z.number().int().positive() }))
+      .query(({ input }) => listTerreiroProductPrices(input.terreiroId)),
+
+    setPrice: protectedProcedure
+      .input(z.object({ terreiroId: z.number().int().positive(), productId: z.number().int().positive(), price: z.number().int().positive() }))
+      .mutation(({ input }) => setTerreiroProductPrice(input.terreiroId, input.productId, input.price)),
+
+    removePrice: protectedProcedure
+      .input(z.object({ terreiroId: z.number().int().positive(), productId: z.number().int().positive() }))
+      .mutation(({ input }) => removeTerreiroProductPrice(input.terreiroId, input.productId)),
+  }),
 });
 
 // ─── Portal do Parceiro (acesso dos terreiros) ────────────────────────────────
@@ -1411,7 +1435,7 @@ const portalRouter = router({
   }),
 
   products: router({
-    list: terreiroProcedure.query(({ ctx }) => listPartnerVisibleProducts(ctx.terreiro.tierId)),
+    list: terreiroProcedure.query(({ ctx }) => listPartnerVisibleProducts(ctx.terreiro.id, ctx.terreiro.tierId)),
   }),
 });
 

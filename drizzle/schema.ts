@@ -271,3 +271,17 @@ export const tierProductPrices = mysqlTable("tierProductPrices", {
 
 export type TierProductPrice = typeof tierProductPrices.$inferSelect;
 export type InsertTierProductPrice = typeof tierProductPrices.$inferInsert;
+
+// Sobrescreve o preço do plano só pra um terreiro específico (ex: negociação
+// pontual). Quando existe, tem prioridade sobre o preço do plano dele.
+export const terreiroProductPrices = mysqlTable("terreiroProductPrices", {
+  id: int("id").autoincrement().primaryKey(),
+  terreiroId: int("terreiroId").notNull(),
+  productId: int("productId").notNull(),
+  price: int("price").notNull(), // em centavos
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TerreiroProductPrice = typeof terreiroProductPrices.$inferSelect;
+export type InsertTerreiroProductPrice = typeof terreiroProductPrices.$inferInsert;

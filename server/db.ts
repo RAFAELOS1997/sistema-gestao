@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql, desc } from "drizzle-orm";
+import { and, eq, gte, lte, sql, desc, or, isNotNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, InsertProduct, InsertSale, InsertPurchase, InsertSupplier, InsertProductSupplier,
@@ -7,6 +7,7 @@ import {
   supplierCatalog, InsertSupplierCatalogItem,
   terreiros, InsertTerreiro,
   partnerTiers, InsertPartnerTier, tierProductPrices, InsertTierProductPrice,
+  terreiroProductPrices,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -662,24 +663,91 @@ export async function touchTerreiroLastSignedIn(id: number) {
 }
 
 // Catálogo exposto no Portal do Parceiro: só produtos ativos com estoque, e
-// só os que têm preço cadastrado no plano daquele terreiro (produto sem preço
-// no plano fica escondido). O preço mostrado é o do plano, nunca o de custo.
-export async function listPartnerVisibleProducts(tierId: number | null) {
+// só os que têm preço cadastrado (preço específico do terreiro OU preço do
+// plano dele — produto sem nenhum dos dois fica escondido). O preço
+// específico do terreiro tem prioridade sobre o do plano. Nunca inclui custo.
+export async function listPartnerVisibleProducts(terreiroId: number, tierId: number | null) {
   const db = await getDb();
-  if (!db || !tierId) return [];
+  if (!db) return [];
+  const tierJoinCondition = tierId
+    ? and(eq(tierProductPrices.productId, products.id), eq(tierProductPrices.tierId, tierId))
+    : sql`false`;
   return db
     .select({
       id: products.id,
       name: products.name,
       category: products.category,
-      salePrice: tierProductPrices.price,
+      salePrice: sql<number>`coalesce(${terreiroProductPrices.price}, ${tierProductPrices.price})`,
       currentStock: products.currentStock,
       imageUrl: products.imageUrl,
     })
-    .from(tierProductPrices)
-    .innerJoin(products, eq(tierProductPrices.productId, products.id))
-    .where(and(eq(tierProductPrices.tierId, tierId), eq(products.isActive, 1), gte(products.currentStock, 1)))
+    .from(products)
+    .leftJoin(tierProductPrices, tierJoinCondition)
+    .leftJoin(
+      terreiroProductPrices,
+      and(eq(terreiroProductPrices.productId, products.id), eq(terreiroProductPrices.terreiroId, terreiroId))
+    )
+    .where(
+      and(
+        eq(products.isActive, 1),
+        gte(products.currentStock, 1),
+        or(isNotNull(tierProductPrices.price), isNotNull(terreiroProductPrices.price))
+      )
+    )
     .orderBy(products.name);
+}
+
+// Preços de um terreiro específico: todos os produtos ativos, com o preço do
+// plano dele como referência e o preço específico (se sobrescrito). Usado na
+// página de gestão individual do terreiro.
+export async function listTerreiroProductPrices(terreiroId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const terreiro = await getTerreiroById(terreiroId);
+  const tierId = terreiro?.tierId ?? null;
+  const tierJoinCondition = tierId
+    ? and(eq(tierProductPrices.productId, products.id), eq(tierProductPrices.tierId, tierId))
+    : sql`false`;
+  return db
+    .select({
+      productId: products.id,
+      name: products.name,
+      category: products.category,
+      currentStock: products.currentStock,
+      tierPrice: tierProductPrices.price,
+      overridePrice: terreiroProductPrices.price,
+    })
+    .from(products)
+    .leftJoin(tierProductPrices, tierJoinCondition)
+    .leftJoin(
+      terreiroProductPrices,
+      and(eq(terreiroProductPrices.productId, products.id), eq(terreiroProductPrices.terreiroId, terreiroId))
+    )
+    .where(eq(products.isActive, 1))
+    .orderBy(products.name);
+}
+
+export async function setTerreiroProductPrice(terreiroId: number, productId: number, price: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db
+    .select({ id: terreiroProductPrices.id })
+    .from(terreiroProductPrices)
+    .where(and(eq(terreiroProductPrices.terreiroId, terreiroId), eq(terreiroProductPrices.productId, productId)))
+    .limit(1);
+  if (existing[0]) {
+    await db.update(terreiroProductPrices).set({ price }).where(eq(terreiroProductPrices.id, existing[0].id));
+  } else {
+    await db.insert(terreiroProductPrices).values({ terreiroId, productId, price });
+  }
+}
+
+export async function removeTerreiroProductPrice(terreiroId: number, productId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .delete(terreiroProductPrices)
+    .where(and(eq(terreiroProductPrices.terreiroId, terreiroId), eq(terreiroProductPrices.productId, productId)));
 }
 
 // ─── Planos de Parceria (Prata/Ouro/Diamante) ─────────────────────────────────

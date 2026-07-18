@@ -93,8 +93,8 @@ describe("portal.products.list", () => {
     }
   });
 
-  it("terreiro sem plano definido não vê nenhum produto (fica escondido até eu definir o preço)", async () => {
-    expect(await listPartnerVisibleProducts(null)).toEqual([]);
+  it("terreiro sem plano definido e sem preço específico não vê nenhum produto", async () => {
+    expect(await listPartnerVisibleProducts(7, null)).toEqual([]);
   });
 });
 

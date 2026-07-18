@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit2, Power, Medal } from "lucide-react";
+import { Plus, Edit2, Power, Medal, Eye } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -173,9 +173,11 @@ export default function Partners() {
                 </div>
                 <div>
                   <Label htmlFor="tierId">Plano</Label>
-                  <Select value={formData.tierId} onValueChange={(v) => setFormData({ ...formData, tierId: v })}>
+                  <Select value={formData.tierId} onValueChange={(v) => v && setFormData({ ...formData, tierId: v })}>
                     <SelectTrigger id="tierId">
-                      <SelectValue />
+                      <SelectValue>
+                        {formData.tierId === NO_TIER ? "Sem plano" : tiers.find((t) => String(t.id) === formData.tierId)?.name}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value={NO_TIER}>Sem plano (não vê produtos ainda)</SelectItem>
@@ -263,6 +265,11 @@ export default function Partners() {
                       </span>
                     </TableCell>
                     <TableCell className="text-right space-x-2">
+                      <Link href={`/parceiros-terreiros/${t.id}`}>
+                        <Button variant="outline" size="sm">
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                      </Link>
                       <Button variant="outline" size="sm" onClick={() => handleEdit(t)}>
                         <Edit2 className="w-4 h-4" />
                       </Button>
