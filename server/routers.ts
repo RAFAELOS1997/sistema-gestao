@@ -66,6 +66,14 @@ import {
   setTerreiroActive,
   touchTerreiroLastSignedIn,
   listPartnerVisibleProducts,
+  listPartnerTiers,
+  getPartnerTierById,
+  createPartnerTier,
+  updatePartnerTier,
+  deletePartnerTier,
+  listTierProductPrices,
+  setTierProductPrice,
+  removeTierProductPrice,
 } from "./db";
 
 // ─── Products Router ──────────────────────────────────────────────────────────
@@ -1300,6 +1308,7 @@ const terreirosRouter = router({
         password: z.string().min(6, "Senha deve ter ao menos 6 caracteres"),
         contactName: z.string().optional(),
         phone: z.string().optional(),
+        tierId: z.number().int().positive().nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -1310,6 +1319,7 @@ const terreirosRouter = router({
         passwordHash,
         contactName: input.contactName || null,
         phone: input.phone || null,
+        tierId: input.tierId ?? null,
         isActive: 1,
       });
       await createAuditLog({
@@ -1330,6 +1340,7 @@ const terreirosRouter = router({
         password: z.string().min(6).optional(),
         contactName: z.string().optional(),
         phone: z.string().optional(),
+        tierId: z.number().int().positive().nullable().optional(),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -1366,9 +1377,16 @@ const terreirosRouter = router({
 // venda — o preço de custo nunca é incluído na resposta.
 
 const portalRouter = router({
-  me: publicProcedure.query(({ ctx }) =>
-    ctx.terreiro ? { id: ctx.terreiro.id, name: ctx.terreiro.name, username: ctx.terreiro.username } : null
-  ),
+  me: publicProcedure.query(async ({ ctx }) => {
+    if (!ctx.terreiro) return null;
+    const tier = ctx.terreiro.tierId ? await getPartnerTierById(ctx.terreiro.tierId) : null;
+    return {
+      id: ctx.terreiro.id,
+      name: ctx.terreiro.name,
+      username: ctx.terreiro.username,
+      tierName: tier?.name ?? null,
+    };
+  }),
 
   login: publicProcedure
     .input(z.object({ username: z.string().min(1), password: z.string().min(1) }))
@@ -1393,7 +1411,71 @@ const portalRouter = router({
   }),
 
   products: router({
-    list: terreiroProcedure.query(() => listPartnerVisibleProducts()),
+    list: terreiroProcedure.query(({ ctx }) => listPartnerVisibleProducts(ctx.terreiro.tierId)),
+  }),
+});
+
+// ─── Planos de Parceria (Prata/Ouro/Diamante) ─────────────────────────────────
+// Cada plano tem seu próprio preço por produto. Produto sem preço cadastrado
+// no plano fica escondido pro terreiro daquele plano (mérito: quanto mais o
+// terreiro compra, mais o admin promove ele de plano).
+
+const partnerTiersRouter = router({
+  list: protectedProcedure.query(() => listPartnerTiers()),
+
+  create: protectedProcedure
+    .input(z.object({ name: z.string().min(1), sortOrder: z.number().int().min(0).default(0) }))
+    .mutation(async ({ input, ctx }) => {
+      const result = await createPartnerTier(input);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "partner_tier_created",
+        module: "partners",
+        description: `Plano "${input.name}" criado`,
+      });
+      return result;
+    }),
+
+  update: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), name: z.string().min(1).optional(), sortOrder: z.number().int().min(0).optional() }))
+    .mutation(async ({ input, ctx }) => {
+      const { id, ...data } = input;
+      await updatePartnerTier(id, data);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "partner_tier_updated",
+        module: "partners",
+        description: `Plano ID ${id} atualizado`,
+      });
+      return { success: true };
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      await deletePartnerTier(input.id);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "partner_tier_deleted",
+        module: "partners",
+        description: `Plano ID ${input.id} excluído`,
+      });
+      return { success: true };
+    }),
+
+  // Preços por produto dentro de um plano — produto sem preço fica escondido.
+  prices: router({
+    list: protectedProcedure
+      .input(z.object({ tierId: z.number().int().positive() }))
+      .query(({ input }) => listTierProductPrices(input.tierId)),
+
+    setPrice: protectedProcedure
+      .input(z.object({ tierId: z.number().int().positive(), productId: z.number().int().positive(), price: z.number().int().positive() }))
+      .mutation(({ input }) => setTierProductPrice(input.tierId, input.productId, input.price)),
+
+    removePrice: protectedProcedure
+      .input(z.object({ tierId: z.number().int().positive(), productId: z.number().int().positive() }))
+      .mutation(({ input }) => removeTierProductPrice(input.tierId, input.productId)),
   }),
 });
 
@@ -1475,6 +1557,7 @@ export const appRouter = router({
   receipts: receiptsRouter,
   terreiros: terreirosRouter,
   portal: portalRouter,
+  partnerTiers: partnerTiersRouter,
 });
 
 export type AppRouter = typeof appRouter;

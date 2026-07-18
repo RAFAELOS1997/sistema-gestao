@@ -234,6 +234,7 @@ export const terreiros = mysqlTable("terreiros", {
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   contactName: varchar("contactName", { length: 255 }),
   phone: varchar("phone", { length: 20 }),
+  tierId: int("tierId"), // plano de parceria (Prata/Ouro/Diamante) — define o preço que ele vê
   isActive: int("isActive").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -242,3 +243,31 @@ export const terreiros = mysqlTable("terreiros", {
 
 export type Terreiro = typeof terreiros.$inferSelect;
 export type InsertTerreiro = typeof terreiros.$inferInsert;
+
+// ─── Planos de Parceria (Prata/Ouro/Diamante) ─────────────────────────────────
+// Substituem o preço único: cada terreiro sobe de plano por mérito (volume de
+// compra) e cada plano tem seu próprio preço por produto. Produto sem preço
+// cadastrado no plano do terreiro fica escondido pra ele.
+
+export const partnerTiers = mysqlTable("partnerTiers", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull().unique(),
+  sortOrder: int("sortOrder").notNull().default(0), // menor = plano mais básico
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PartnerTier = typeof partnerTiers.$inferSelect;
+export type InsertPartnerTier = typeof partnerTiers.$inferInsert;
+
+export const tierProductPrices = mysqlTable("tierProductPrices", {
+  id: int("id").autoincrement().primaryKey(),
+  tierId: int("tierId").notNull(),
+  productId: int("productId").notNull(),
+  price: int("price").notNull(), // em centavos — preço desse produto nesse plano
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TierProductPrice = typeof tierProductPrices.$inferSelect;
+export type InsertTierProductPrice = typeof tierProductPrices.$inferInsert;

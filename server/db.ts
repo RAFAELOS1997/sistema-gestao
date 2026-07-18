@@ -6,6 +6,7 @@ import {
   roles, permissions, rolePermissions, userRoles, auditLog, systemConfig,
   supplierCatalog, InsertSupplierCatalogItem,
   terreiros, InsertTerreiro,
+  partnerTiers, InsertPartnerTier, tierProductPrices, InsertTierProductPrice,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -661,20 +662,103 @@ export async function touchTerreiroLastSignedIn(id: number) {
 }
 
 // Catálogo exposto no Portal do Parceiro: só produtos ativos com estoque, e
-// só os campos que um terreiro parceiro pode ver (nunca o preço de custo).
-export async function listPartnerVisibleProducts() {
+// só os que têm preço cadastrado no plano daquele terreiro (produto sem preço
+// no plano fica escondido). O preço mostrado é o do plano, nunca o de custo.
+export async function listPartnerVisibleProducts(tierId: number | null) {
   const db = await getDb();
-  if (!db) return [];
+  if (!db || !tierId) return [];
   return db
     .select({
       id: products.id,
       name: products.name,
       category: products.category,
-      salePrice: products.salePrice,
+      salePrice: tierProductPrices.price,
       currentStock: products.currentStock,
       imageUrl: products.imageUrl,
     })
-    .from(products)
-    .where(and(eq(products.isActive, 1), gte(products.currentStock, 1)))
+    .from(tierProductPrices)
+    .innerJoin(products, eq(tierProductPrices.productId, products.id))
+    .where(and(eq(tierProductPrices.tierId, tierId), eq(products.isActive, 1), gte(products.currentStock, 1)))
     .orderBy(products.name);
+}
+
+// ─── Planos de Parceria (Prata/Ouro/Diamante) ─────────────────────────────────
+
+export async function listPartnerTiers() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(partnerTiers).orderBy(partnerTiers.sortOrder);
+}
+
+export async function getPartnerTierById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(partnerTiers).where(eq(partnerTiers.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function createPartnerTier(data: Omit<InsertPartnerTier, "id" | "createdAt" | "updatedAt">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.insert(partnerTiers).values(data);
+}
+
+export async function updatePartnerTier(id: number, data: Partial<Omit<InsertPartnerTier, "id" | "createdAt" | "updatedAt">>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(partnerTiers).set(data).where(eq(partnerTiers.id, id));
+}
+
+export async function deletePartnerTier(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const inUse = await db.select({ id: terreiros.id }).from(terreiros).where(eq(terreiros.tierId, id)).limit(1);
+  if (inUse.length > 0) throw new Error("Existem terreiros nesse plano — mude o plano deles antes de excluir");
+  await db.delete(tierProductPrices).where(eq(tierProductPrices.tierId, id));
+  await db.delete(partnerTiers).where(eq(partnerTiers.id, id));
+}
+
+// Preços de um plano: todos os produtos ativos, com o preço do plano quando
+// já foi definido (null = ainda escondido pro terreiro daquele plano).
+export async function listTierProductPrices(tierId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      productId: products.id,
+      name: products.name,
+      category: products.category,
+      currentStock: products.currentStock,
+      price: tierProductPrices.price,
+    })
+    .from(products)
+    .leftJoin(
+      tierProductPrices,
+      and(eq(tierProductPrices.productId, products.id), eq(tierProductPrices.tierId, tierId))
+    )
+    .where(eq(products.isActive, 1))
+    .orderBy(products.name);
+}
+
+export async function setTierProductPrice(tierId: number, productId: number, price: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await db
+    .select({ id: tierProductPrices.id })
+    .from(tierProductPrices)
+    .where(and(eq(tierProductPrices.tierId, tierId), eq(tierProductPrices.productId, productId)))
+    .limit(1);
+  if (existing[0]) {
+    await db.update(tierProductPrices).set({ price }).where(eq(tierProductPrices.id, existing[0].id));
+  } else {
+    await db.insert(tierProductPrices).values({ tierId, productId, price });
+  }
+}
+
+export async function removeTierProductPrice(tierId: number, productId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .delete(tierProductPrices)
+    .where(and(eq(tierProductPrices.tierId, tierId), eq(tierProductPrices.productId, productId)));
 }

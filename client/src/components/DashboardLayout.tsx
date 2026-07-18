@@ -175,7 +175,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                       tooltip={item.label}
                       className={`h-10 transition-all font-normal rounded-lg ${
                         isActive
-                          ? "bg-accent/20 text-accent border border-accent/30"
+                          ? "!bg-accent/20 !text-accent border border-accent/30"
                           : "hover:bg-accent/10 text-foreground"
                       }`}
                     >

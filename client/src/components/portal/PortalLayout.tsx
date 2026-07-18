@@ -24,10 +24,17 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
               <p className="text-xs text-muted-foreground truncate mt-1">{terreiro?.name}</p>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={logout} className="shrink-0">
-            <LogOut className="h-4 w-4 sm:mr-2" />
-            <span className="hidden sm:inline">Sair</span>
-          </Button>
+          <div className="flex items-center gap-3 shrink-0">
+            {terreiro?.tierName && (
+              <span className="px-2.5 py-1 rounded-lg text-xs font-medium bg-accent/20 text-accent border border-accent/30">
+                Plano {terreiro.tierName}
+              </span>
+            )}
+            <Button variant="outline" size="sm" onClick={logout}>
+              <LogOut className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Sair</span>
+            </Button>
+          </div>
         </div>
       </header>
       <main className="max-w-6xl mx-auto p-4 sm:p-6">{children}</main>

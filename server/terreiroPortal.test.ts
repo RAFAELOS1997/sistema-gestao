@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { appRouter } from "./routers";
 import { PARTNER_UNAUTHED_ERR_MSG, UNAUTHED_ERR_MSG } from "../shared/const";
 import { signTerreiroSession, verifyTerreiroSession } from "./_core/terreiroAuth";
+import { listPartnerVisibleProducts } from "./db";
 import type { TrpcContext } from "./_core/context";
 
 function createPublicContext(): TrpcContext {
@@ -26,6 +27,7 @@ function createTerreiroContext(): TrpcContext {
       passwordHash: "n/a",
       contactName: null,
       phone: null,
+      tierId: 1,
       isActive: 1,
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -69,7 +71,8 @@ describe("portal.me", () => {
   it("retorna os dados básicos do terreiro autenticado", async () => {
     const caller = appRouter.createCaller(createTerreiroContext());
     const result = await caller.portal.me();
-    expect(result).toEqual({ id: 7, name: "Terreiro Teste", username: "terreiro-teste" });
+    // Sem banco de dados no ambiente de teste, getPartnerTierById resolve null.
+    expect(result).toEqual({ id: 7, name: "Terreiro Teste", username: "terreiro-teste", tierName: null });
   });
 });
 
@@ -88,6 +91,10 @@ describe("portal.products.list", () => {
     for (const product of products) {
       expect(product).not.toHaveProperty("costPrice");
     }
+  });
+
+  it("terreiro sem plano definido não vê nenhum produto (fica escondido até eu definir o preço)", async () => {
+    expect(await listPartnerVisibleProducts(null)).toEqual([]);
   });
 });
 

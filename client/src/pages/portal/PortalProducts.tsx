@@ -80,6 +80,11 @@ export default function PortalProducts() {
 
       {productsQuery.isLoading ? (
         <div className="text-center py-8 text-muted-foreground">Carregando produtos...</div>
+      ) : products.length === 0 ? (
+        <div className="text-center py-12 text-muted-foreground max-w-md mx-auto">
+          Ainda não há produtos liberados para o seu plano. Fale com a Toca da Pantera — assim que seu plano tiver
+          preços definidos, os produtos aparecem aqui.
+        </div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-8 text-muted-foreground">Nenhum produto encontrado</div>
       ) : (

@@ -10,6 +10,7 @@ import Dashboard from "./pages/Dashboard";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Partners from "./pages/Partners";
+import PartnerTiers from "./pages/PartnerTiers";
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalProducts from "./pages/portal/PortalProducts";
 import PriceReview from "./pages/PriceReview";
@@ -92,6 +93,11 @@ function Router() {
       <Route path="/parceiros-terreiros">
         <DashboardLayout>
           <Partners />
+        </DashboardLayout>
+      </Route>
+      <Route path="/planos-parceria">
+        <DashboardLayout>
+          <PartnerTiers />
         </DashboardLayout>
       </Route>
 
