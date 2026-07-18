@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import Partners from "./pages/Partners";
 import PartnerDetail from "./pages/PartnerDetail";
 import PartnerTiers from "./pages/PartnerTiers";
+import PortalConsignments from "./pages/portal/PortalConsignments";
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalProducts from "./pages/portal/PortalProducts";
 import PriceReview from "./pages/PriceReview";
@@ -113,6 +114,11 @@ function Router() {
       <Route path="/parceiros/produtos">
         <PortalLayout>
           <PortalProducts />
+        </PortalLayout>
+      </Route>
+      <Route path="/parceiros/comodato">
+        <PortalLayout>
+          <PortalConsignments />
         </PortalLayout>
       </Route>
 

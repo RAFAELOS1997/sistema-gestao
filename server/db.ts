@@ -8,6 +8,7 @@ import {
   terreiros, InsertTerreiro,
   partnerTiers, InsertPartnerTier, tierProductPrices, InsertTierProductPrice,
   terreiroProductPrices,
+  consignments,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -223,6 +224,33 @@ export async function runStartupMigrations() {
     `);
   } catch (error: any) {
     console.error("[migrations] terreiroProductPrices:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS consignments (
+        id int AUTO_INCREMENT NOT NULL,
+        terreiroId int NOT NULL,
+        productId int NOT NULL,
+        quantity int NOT NULL,
+        quantitySold int NOT NULL DEFAULT 0,
+        quantityReturned int NOT NULL DEFAULT 0,
+        unitPrice int NOT NULL,
+        notes text,
+        leftAt timestamp NOT NULL DEFAULT (now()),
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] consignments:", error);
+  }
+  // MODIFY COLUMN com a lista completa do enum é seguro de rodar de novo.
+  try {
+    await db.execute(sql`ALTER TABLE sales MODIFY COLUMN channel enum('fisico','instagram','terreiro') NOT NULL DEFAULT 'fisico'`);
+  } catch (error: any) {
+    console.error("[migrations] sales.channel terreiro:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -970,4 +998,163 @@ export async function bulkFillTierPrices(tierId: number, discountPercent: number
     updated++;
   }
   return { updated, skipped };
+}
+
+// ─── Comodato (itens deixados nos terreiros) ──────────────────────────────────
+
+// Resolve o preço que vale pra um terreiro num produto: preço específico dele
+// > preço do plano dele > preço de venda da loja (fallback pro comodato, já
+// que a entrega é decidida pelo admin na hora).
+export async function resolvePartnerPrice(terreiroId: number, productId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const override = await db
+    .select({ price: terreiroProductPrices.price })
+    .from(terreiroProductPrices)
+    .where(and(eq(terreiroProductPrices.terreiroId, terreiroId), eq(terreiroProductPrices.productId, productId)))
+    .limit(1);
+  if (override[0]) return override[0].price;
+
+  const terreiro = await getTerreiroById(terreiroId);
+  if (terreiro?.tierId) {
+    const tierPrice = await db
+      .select({ price: tierProductPrices.price })
+      .from(tierProductPrices)
+      .where(and(eq(tierProductPrices.tierId, terreiro.tierId), eq(tierProductPrices.productId, productId)))
+      .limit(1);
+    if (tierPrice[0]) return tierPrice[0].price;
+  }
+
+  const product = await getProductById(productId);
+  if (!product) throw new Error("Produto não encontrado");
+  return product.salePrice;
+}
+
+export async function listConsignments(terreiroId: number, includeSettled = false) {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      id: consignments.id,
+      productId: consignments.productId,
+      productName: products.name,
+      imageUrl: products.imageUrl,
+      quantity: consignments.quantity,
+      quantitySold: consignments.quantitySold,
+      quantityReturned: consignments.quantityReturned,
+      unitPrice: consignments.unitPrice,
+      notes: consignments.notes,
+      leftAt: consignments.leftAt,
+    })
+    .from(consignments)
+    .innerJoin(products, eq(consignments.productId, products.id))
+    .where(eq(consignments.terreiroId, terreiroId))
+    .orderBy(desc(consignments.leftAt));
+  if (includeSettled) return rows;
+  return rows.filter((row) => row.quantitySold + row.quantityReturned < row.quantity);
+}
+
+// Quantos itens de cada terreiro ainda estão "na rua" (deixados e não
+// acertados) — pra coluna de resumo na lista de terreiros.
+export async function countOpenConsignmentsByTerreiro() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      terreiroId: consignments.terreiroId,
+      openItems: sql<number>`sum(${consignments.quantity} - ${consignments.quantitySold} - ${consignments.quantityReturned})`,
+    })
+    .from(consignments)
+    .groupBy(consignments.terreiroId);
+}
+
+export async function createConsignment(data: {
+  terreiroId: number;
+  productId: number;
+  quantity: number;
+  unitPrice: number;
+  notes?: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const product = await getProductById(data.productId);
+  if (!product) throw new Error("Produto não encontrado");
+  if (product.currentStock < data.quantity) {
+    throw new Error(`Estoque insuficiente. Disponível: ${product.currentStock}`);
+  }
+
+  await db.insert(consignments).values({
+    terreiroId: data.terreiroId,
+    productId: data.productId,
+    quantity: data.quantity,
+    unitPrice: data.unitPrice,
+    notes: data.notes ?? null,
+  });
+  // O item saiu fisicamente da loja — baixa o estoque já na entrega.
+  await db
+    .update(products)
+    .set({ currentStock: sql`${products.currentStock} - ${data.quantity}` })
+    .where(eq(products.id, data.productId));
+}
+
+export async function getConsignmentById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(consignments).where(eq(consignments.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+// Acerto de venda: registra a venda (canal "terreiro") SEM baixar estoque de
+// novo — a baixa já aconteceu quando o item foi deixado no terreiro.
+export async function markConsignmentSold(id: number, quantity: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const consignment = await getConsignmentById(id);
+  if (!consignment) throw new Error("Registro de comodato não encontrado");
+
+  const remaining = consignment.quantity - consignment.quantitySold - consignment.quantityReturned;
+  if (quantity > remaining) {
+    throw new Error(`Só restam ${remaining} item(ns) pendentes nesse comodato`);
+  }
+
+  const product = await getProductById(consignment.productId);
+  const costPrice = product?.costPrice ?? 0;
+
+  await db.insert(sales).values({
+    productId: consignment.productId,
+    quantity,
+    unitPrice: consignment.unitPrice,
+    totalPrice: consignment.unitPrice * quantity,
+    profit: (consignment.unitPrice - costPrice) * quantity,
+    channel: "terreiro",
+    saleDate: new Date(),
+  });
+  await db
+    .update(consignments)
+    .set({ quantitySold: consignment.quantitySold + quantity })
+    .where(eq(consignments.id, id));
+}
+
+// Devolução: o item volta fisicamente pra loja — estoque sobe de volta.
+export async function markConsignmentReturned(id: number, quantity: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const consignment = await getConsignmentById(id);
+  if (!consignment) throw new Error("Registro de comodato não encontrado");
+
+  const remaining = consignment.quantity - consignment.quantitySold - consignment.quantityReturned;
+  if (quantity > remaining) {
+    throw new Error(`Só restam ${remaining} item(ns) pendentes nesse comodato`);
+  }
+
+  await db
+    .update(consignments)
+    .set({ quantityReturned: consignment.quantityReturned + quantity })
+    .where(eq(consignments.id, id));
+  await db
+    .update(products)
+    .set({ currentStock: sql`${products.currentStock} + ${quantity}` })
+    .where(eq(products.id, consignment.productId));
 }

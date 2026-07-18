@@ -23,7 +23,10 @@ export default function Partners() {
   const utils = trpc.useUtils();
   const { data: terreiros = [], isLoading } = trpc.terreiros.list.useQuery({ includeInactive: true });
   const { data: tiers = [] } = trpc.partnerTiers.list.useQuery();
+  const { data: openConsignments = [] } = trpc.terreiros.consignments.openCountByTerreiro.useQuery();
   const tierName = (tierId: number | null) => tiers.find((t) => t.id === tierId)?.name ?? null;
+  const openItemsOf = (terreiroId: number) =>
+    Number(openConsignments.find((c) => c.terreiroId === terreiroId)?.openItems ?? 0);
 
   const createMutation = trpc.terreiros.create.useMutation({
     onSuccess: () => {
@@ -254,6 +257,7 @@ export default function Partners() {
                   <TableHead>Usuário</TableHead>
                   <TableHead>Plano</TableHead>
                   <TableHead>Contato</TableHead>
+                  <TableHead>Em comodato</TableHead>
                   <TableHead>Último acesso</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -274,6 +278,15 @@ export default function Partners() {
                     <TableCell className="text-muted-foreground">
                       {t.contactName || "-"}
                       {t.phone ? ` · ${t.phone}` : ""}
+                    </TableCell>
+                    <TableCell>
+                      {openItemsOf(t.id) > 0 ? (
+                        <span className="px-2 py-1 rounded text-sm bg-amber-900/30 text-amber-200">
+                          {openItemsOf(t.id)} item(ns)
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {t.lastSignedIn
