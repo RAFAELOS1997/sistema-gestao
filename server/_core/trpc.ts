@@ -1,4 +1,4 @@
-import { NOT_ADMIN_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
+import { NOT_ADMIN_ERR_MSG, PARTNER_UNAUTHED_ERR_MSG, UNAUTHED_ERR_MSG } from '@shared/const';
 import { initTRPC, TRPCError } from "@trpc/server";
 import superjson from "superjson";
 import type { TrpcContext } from "./context";
@@ -39,6 +39,25 @@ export const adminProcedure = t.procedure.use(
       ctx: {
         ...ctx,
         user: ctx.user,
+      },
+    });
+  }),
+);
+
+// Procedure do Portal do Parceiro — exige sessão de terreiro válida.
+// Independente do requireUser acima: um terreiro nunca tem ctx.user.
+export const terreiroProcedure = t.procedure.use(
+  t.middleware(async opts => {
+    const { ctx, next } = opts;
+
+    if (!ctx.terreiro) {
+      throw new TRPCError({ code: "UNAUTHORIZED", message: PARTNER_UNAUTHED_ERR_MSG });
+    }
+
+    return next({
+      ctx: {
+        ...ctx,
+        terreiro: ctx.terreiro,
       },
     });
   }),

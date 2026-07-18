@@ -221,3 +221,24 @@ export const receipts = mysqlTable("receipts", {
 
 export type Receipt = typeof receipts.$inferSelect;
 export type InsertReceipt = typeof receipts.$inferInsert;
+
+// ─── Terreiros Parceiros (Portal do Parceiro) ─────────────────────────────────
+// Login separado dos usuários do sistema (staff). Cada terreiro parceiro
+// recebe um usuário/senha cadastrado pelo admin e só acessa o portal
+// simplificado com os produtos em estoque e o preço de venda.
+
+export const terreiros = mysqlTable("terreiros", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(), // Nome do terreiro
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  contactName: varchar("contactName", { length: 255 }),
+  phone: varchar("phone", { length: 20 }),
+  isActive: int("isActive").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn"),
+});
+
+export type Terreiro = typeof terreiros.$inferSelect;
+export type InsertTerreiro = typeof terreiros.$inferInsert;

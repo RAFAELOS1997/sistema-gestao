@@ -5,6 +5,7 @@ import {
   products, sales, users, purchases, suppliers, productSuppliers,
   roles, permissions, rolePermissions, userRoles, auditLog, systemConfig,
   supplierCatalog, InsertSupplierCatalogItem,
+  terreiros, InsertTerreiro,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -601,4 +602,79 @@ export async function deleteSupplierCatalogItem(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(supplierCatalog).where(eq(supplierCatalog.id, id));
+}
+
+// ─── Terreiros Parceiros (Portal do Parceiro) ─────────────────────────────────
+
+export async function listTerreiros(includeInactive = false) {
+  const db = await getDb();
+  if (!db) return [];
+  if (includeInactive) return db.select().from(terreiros).orderBy(terreiros.name);
+  return db.select().from(terreiros).where(eq(terreiros.isActive, 1)).orderBy(terreiros.name);
+}
+
+export async function getTerreiroById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(terreiros).where(eq(terreiros.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function getTerreiroByUsername(username: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(terreiros).where(eq(terreiros.username, username)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function createTerreiro(data: Omit<InsertTerreiro, "id" | "createdAt" | "updatedAt" | "lastSignedIn">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getTerreiroByUsername(data.username);
+  if (existing) throw new Error("Já existe um login com esse nome de usuário");
+  return db.insert(terreiros).values(data);
+}
+
+export async function updateTerreiro(
+  id: number,
+  data: Partial<Omit<InsertTerreiro, "id" | "createdAt" | "updatedAt">>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (data.username) {
+    const existing = await getTerreiroByUsername(data.username);
+    if (existing && existing.id !== id) throw new Error("Já existe um login com esse nome de usuário");
+  }
+  await db.update(terreiros).set(data).where(eq(terreiros.id, id));
+}
+
+export async function setTerreiroActive(id: number, isActive: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(terreiros).set({ isActive: isActive ? 1 : 0 }).where(eq(terreiros.id, id));
+}
+
+export async function touchTerreiroLastSignedIn(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(terreiros).set({ lastSignedIn: new Date() }).where(eq(terreiros.id, id));
+}
+
+// Catálogo exposto no Portal do Parceiro: só produtos ativos com estoque, e
+// só os campos que um terreiro parceiro pode ver (nunca o preço de custo).
+export async function listPartnerVisibleProducts() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: products.id,
+      name: products.name,
+      category: products.category,
+      salePrice: products.salePrice,
+      currentStock: products.currentStock,
+      imageUrl: products.imageUrl,
+    })
+    .from(products)
+    .where(and(eq(products.isActive, 1), gte(products.currentStock, 1)))
+    .orderBy(products.name);
 }

@@ -85,6 +85,13 @@
       "when": 1784357351765,
       "tag": "0011_chubby_violations",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1784359968543,
+      "tag": "0012_big_gladiator",
+      "breakpoints": true
     }
   ]
 }
