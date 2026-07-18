@@ -2,6 +2,11 @@
 **/node_modules
 .pnpm-store/
 
+# Este projeto usa pnpm (ver packageManager em package.json) — um
+# package-lock.json do npm não deve ser versionado, geraria conflito
+# com o pnpm-lock.yaml
+package-lock.json
+
 # Build outputs
 dist/
 build/
