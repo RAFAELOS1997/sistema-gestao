@@ -938,3 +938,36 @@ export async function removeTierProductPrice(tierId: number, productId: number) 
     .delete(tierProductPrices)
     .where(and(eq(tierProductPrices.tierId, tierId), eq(tierProductPrices.productId, productId)));
 }
+
+// Preenche os preços de um plano em massa a partir do preço de venda da loja,
+// com um desconto percentual (negativo = acréscimo). Com overwrite=false só
+// preenche produtos que ainda não têm preço no plano — os já negociados um a
+// um ficam intocados.
+export async function bulkFillTierPrices(tierId: number, discountPercent: number, overwrite: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const activeProducts = await db
+    .select({ id: products.id, salePrice: products.salePrice })
+    .from(products)
+    .where(eq(products.isActive, 1));
+  const existing = await db
+    .select({ productId: tierProductPrices.productId })
+    .from(tierProductPrices)
+    .where(eq(tierProductPrices.tierId, tierId));
+  const alreadyPriced = new Set(existing.map((row) => row.productId));
+
+  const factor = 1 - discountPercent / 100;
+  let updated = 0;
+  let skipped = 0;
+  for (const product of activeProducts) {
+    if (!overwrite && alreadyPriced.has(product.id)) {
+      skipped++;
+      continue;
+    }
+    const price = Math.max(1, Math.round(product.salePrice * factor));
+    await setTierProductPrice(tierId, product.id, price);
+    updated++;
+  }
+  return { updated, skipped };
+}

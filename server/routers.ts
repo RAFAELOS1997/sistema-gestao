@@ -78,7 +78,16 @@ import {
   listTerreiroProductPrices,
   setTerreiroProductPrice,
   removeTerreiroProductPrice,
+  bulkFillTierPrices,
 } from "./db";
+
+// O hash de senha (scrypt) nunca deve sair do servidor — sem isso, auth.me e
+// as listagens de usuários/terreiros entregavam o hash pro navegador (e o
+// front ainda espelhava em localStorage).
+const stripPasswordHash = <T extends { passwordHash?: string | null }>(entity: T) => {
+  const { passwordHash, ...safe } = entity;
+  return safe;
+};
 
 // ─── Products Router ──────────────────────────────────────────────────────────
 
@@ -1222,11 +1231,14 @@ const supplierCatalogRouter = router({
 // ─── Users Router ────────────────────────────────────────────────────────────
 
 const usersRouter = router({
-  list: protectedProcedure.query(() => listUsers()),
+  list: protectedProcedure.query(async () => (await listUsers()).map(stripPasswordHash)),
 
   getById: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
-    .query(({ input }) => getUserById(input.id)),
+    .query(async ({ input }) => {
+      const user = await getUserById(input.id);
+      return user ? stripPasswordHash(user) : null;
+    }),
 
   create: protectedProcedure
     .input(
@@ -1302,11 +1314,14 @@ const receiptsRouter = router({
 const terreirosRouter = router({
   list: protectedProcedure
     .input(z.object({ includeInactive: z.boolean().optional() }).optional())
-    .query(({ input }) => listTerreiros(input?.includeInactive ?? false)),
+    .query(async ({ input }) => (await listTerreiros(input?.includeInactive ?? false)).map(stripPasswordHash)),
 
   getById: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
-    .query(({ input }) => getTerreiroById(input.id)),
+    .query(async ({ input }) => {
+      const terreiro = await getTerreiroById(input.id);
+      return terreiro ? stripPasswordHash(terreiro) : null;
+    }),
 
   create: protectedProcedure
     .input(
@@ -1500,6 +1515,28 @@ const partnerTiersRouter = router({
     removePrice: protectedProcedure
       .input(z.object({ tierId: z.number().int().positive(), productId: z.number().int().positive() }))
       .mutation(({ input }) => removeTierProductPrice(input.tierId, input.productId)),
+
+    // Preenche o plano inteiro de uma vez a partir do preço de venda da loja
+    // com um desconto % (negativo = acréscimo). overwrite=false preserva os
+    // preços já definidos manualmente.
+    bulkFill: protectedProcedure
+      .input(
+        z.object({
+          tierId: z.number().int().positive(),
+          discountPercent: z.number().min(-100).max(99),
+          overwrite: z.boolean().default(false),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const result = await bulkFillTierPrices(input.tierId, input.discountPercent, input.overwrite);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "partner_tier_bulk_fill",
+          module: "partners",
+          description: `Plano ID ${input.tierId}: ${result.updated} preços preenchidos (desconto ${input.discountPercent}%, ${input.overwrite ? "sobrescrevendo" : "só vazios"})`,
+        });
+        return result;
+      }),
   }),
 });
 
@@ -1508,7 +1545,7 @@ const partnerTiersRouter = router({
 export const appRouter = router({
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query((opts) => opts.ctx.user),
+    me: publicProcedure.query((opts) => (opts.ctx.user ? stripPasswordHash(opts.ctx.user) : null)),
     needsSetup: publicProcedure.query(async () => {
       const existing = await listUsers();
       return existing.length === 0;
@@ -1539,7 +1576,7 @@ export const appRouter = router({
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-        return { success: true, user } as const;
+        return { success: true, user: stripPasswordHash(user) } as const;
       }),
     login: publicProcedure
       .input(
@@ -1562,7 +1599,7 @@ export const appRouter = router({
         const cookieOptions = getSessionCookieOptions(ctx.req);
         ctx.res.cookie(COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
 
-        return { success: true, user } as const;
+        return { success: true, user: stripPasswordHash(user) } as const;
       }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
