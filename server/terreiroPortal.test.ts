@@ -100,6 +100,35 @@ describe("portal.products.list", () => {
 
 // ─── Gestão de logins pelo admin ────────────────────────────────────────────────
 
+// ─── Sanitização de dados sensíveis ───────────────────────────────────────────
+
+describe("sanitização do hash de senha", () => {
+  it("auth.me nunca expõe o passwordHash do usuário", async () => {
+    const ctx: TrpcContext = {
+      user: {
+        id: 1,
+        openId: "staff-user",
+        name: "Admin",
+        email: "admin@example.com",
+        loginMethod: "local",
+        passwordHash: "salt:hash-super-secreto",
+        role: "admin",
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        lastSignedIn: new Date(),
+      },
+      terreiro: null,
+      req: { protocol: "https", headers: {} } as TrpcContext["req"],
+      res: { cookie: () => {}, clearCookie: () => {} } as unknown as TrpcContext["res"],
+    };
+    const caller = appRouter.createCaller(ctx);
+    const me = await caller.auth.me();
+    expect(me).not.toBeNull();
+    expect(me).not.toHaveProperty("passwordHash");
+    expect(me?.name).toBe("Admin");
+  });
+});
+
 describe("terreiros.create", () => {
   it("exige sessão de staff (não aceita sessão de parceiro nem anônimo)", async () => {
     const anonCaller = appRouter.createCaller(createPublicContext());

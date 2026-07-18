@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Edit2, Power, Medal, Eye } from "lucide-react";
+import { Plus, Edit2, Power, Medal, Eye, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -119,7 +119,22 @@ export default function Partners() {
           <h1 className="text-3xl font-bold text-foreground">Terreiros Parceiros</h1>
           <p className="text-muted-foreground">Cadastre o login e o plano de cada terreiro parceiro</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={async () => {
+              const url = `${window.location.origin}/parceiros/login`;
+              try {
+                await navigator.clipboard.writeText(url);
+                toast.success("Link do portal copiado! Manda pro terreiro no WhatsApp.");
+              } catch {
+                toast.info(url);
+              }
+            }}
+          >
+            <Link2 className="w-4 h-4 mr-2" />
+            Copiar link do portal
+          </Button>
           <Link href="/planos-parceria">
             <Button variant="outline">
               <Medal className="w-4 h-4 mr-2" />
@@ -239,6 +254,7 @@ export default function Partners() {
                   <TableHead>Usuário</TableHead>
                   <TableHead>Plano</TableHead>
                   <TableHead>Contato</TableHead>
+                  <TableHead>Último acesso</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -258,6 +274,11 @@ export default function Partners() {
                     <TableCell className="text-muted-foreground">
                       {t.contactName || "-"}
                       {t.phone ? ` · ${t.phone}` : ""}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-sm">
+                      {t.lastSignedIn
+                        ? new Date(t.lastSignedIn).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+                        : "Nunca entrou"}
                     </TableCell>
                     <TableCell>
                       <span className={`px-2 py-1 rounded text-sm ${t.isActive ? "bg-green-900/30 text-green-200" : "bg-red-900/30 text-red-200"}`}>

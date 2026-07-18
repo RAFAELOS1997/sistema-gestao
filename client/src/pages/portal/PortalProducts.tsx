@@ -42,7 +42,12 @@ export default function PortalProducts() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Produtos em Estoque</h1>
-        <p className="text-muted-foreground text-sm">Confira o que está disponível e o preço de venda</p>
+        <p className="text-muted-foreground text-sm">
+          Confira o que está disponível e o preço de venda
+          {!productsQuery.isLoading && products.length > 0 && (
+            <span> — {filtered.length === products.length ? `${products.length} produto(s)` : `${filtered.length} de ${products.length} produto(s)`}</span>
+          )}
+        </p>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">

@@ -20,6 +20,7 @@ export default function PartnerTiers() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [tierForm, setTierForm] = useState({ name: "", sortOrder: "0" });
   const [priceDrafts, setPriceDrafts] = useState<Record<number, string>>({});
+  const [bulkDiscount, setBulkDiscount] = useState("0");
 
   const utils = trpc.useUtils();
   const { data: tiers = EMPTY_TIERS, isLoading: loadingTiers } = trpc.partnerTiers.list.useQuery();
@@ -74,6 +75,28 @@ export default function PartnerTiers() {
     },
     onError: (error) => toast.error(`Erro: ${error.message}`),
   });
+
+  const bulkFillMutation = trpc.partnerTiers.prices.bulkFill.useMutation({
+    onSuccess: (result) => {
+      toast.success(
+        `${result.updated} preço(s) preenchido(s)` +
+          (result.skipped > 0 ? ` — ${result.skipped} já definidos foram mantidos` : "")
+      );
+      utils.partnerTiers.prices.list.invalidate({ tierId: selectedTierId ?? 0 });
+    },
+    onError: (error) => toast.error(`Erro no preenchimento em massa: ${error.message}`),
+  });
+
+  const handleBulkFill = (overwrite: boolean) => {
+    if (!selectedTierId) return;
+    const discountPercent = Number(bulkDiscount.replace(",", ".")) || 0;
+    if (discountPercent <= -100 || discountPercent >= 100) {
+      toast.error("Desconto deve ficar entre -99% e 99%");
+      return;
+    }
+    if (overwrite && !confirm("Recalcular TODOS os preços desse plano? Os definidos manualmente serão sobrescritos.")) return;
+    bulkFillMutation.mutate({ tierId: selectedTierId, discountPercent, overwrite });
+  };
 
   const handleCreateTier = (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,6 +218,29 @@ export default function PartnerTiers() {
               <CardDescription>Deixe o preço em branco e salve vazio pra esconder o produto desse plano</CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="mb-4 p-3 rounded-lg border border-border bg-background/50 flex flex-wrap items-end gap-3">
+                <div>
+                  <Label htmlFor="bulkDiscount" className="text-xs">Desconto sobre o preço de venda (%)</Label>
+                  <Input
+                    id="bulkDiscount"
+                    type="number"
+                    step="1"
+                    className="w-28 mt-1"
+                    value={bulkDiscount}
+                    onChange={(e) => setBulkDiscount(e.target.value)}
+                  />
+                </div>
+                <Button size="sm" onClick={() => handleBulkFill(false)} disabled={bulkFillMutation.isPending}>
+                  Preencher só os vazios
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => handleBulkFill(true)} disabled={bulkFillMutation.isPending}>
+                  Recalcular todos
+                </Button>
+                <p className="text-xs text-muted-foreground basis-full">
+                  Preenche o plano inteiro de uma vez a partir do preço de venda da loja (0 = mesmo preço; 10 = 10% mais
+                  barato; negativo = acréscimo). "Preencher só os vazios" mantém os preços que você já definiu à mão.
+                </p>
+              </div>
               {loadingPrices ? (
                 <div className="text-center py-8 text-muted-foreground">Carregando produtos...</div>
               ) : priceRows.length === 0 ? (
