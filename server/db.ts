@@ -108,6 +108,15 @@ export async function ensureProductImageColumn() {
   }
 }
 
+// Migração pontual: amplia imageUrl pra MEDIUMTEXT (cabe foto enviada do
+// dispositivo em base64, o TEXT padrão só aguenta ~64KB). MODIFY COLUMN é
+// seguro de rodar de novo mesmo se já estiver no tipo certo.
+export async function ensureProductImageColumnIsMediumtext() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.execute(sql`ALTER TABLE products MODIFY COLUMN imageUrl MEDIUMTEXT`);
+}
+
 export async function getProductById(id: number) {
   const db = await getDb();
   if (!db) return undefined;

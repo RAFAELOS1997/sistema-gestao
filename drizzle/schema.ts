@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { int, mediumtext, mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
 
 export const users = mysqlTable("users", {
   id: int("id").autoincrement().primaryKey(),
@@ -25,7 +25,7 @@ export const products = mysqlTable("products", {
   currentStock: int("currentStock").notNull().default(0),
   minimumStock: int("minimumStock").notNull().default(5),
   description: text("description"),
-  imageUrl: text("imageUrl"),
+  imageUrl: mediumtext("imageUrl"), // mediumtext pra caber foto enviada do dispositivo (base64)
   isActive: int("isActive").default(1).notNull(), // 1 = ativo, 0 = inativo (soft delete)
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

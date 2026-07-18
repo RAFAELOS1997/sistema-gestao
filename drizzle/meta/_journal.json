@@ -78,6 +78,13 @@
       "when": 1784317280295,
       "tag": "0010_fearless_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1784357351765,
+      "tag": "0011_chubby_violations",
+      "breakpoints": true
     }
   ]
 }

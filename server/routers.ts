@@ -14,6 +14,7 @@ import {
   createPurchase,
   updatePurchase,
   ensureProductImageColumn,
+  ensureProductImageColumnIsMediumtext,
   deleteProduct,
   deactivateProduct,
   reactivateProduct,
@@ -84,6 +85,20 @@ const nameCoverage = (aTokens: string[], bTokens: string[]) => {
   return shared / Math.min(aSet.size, bSet.size);
 };
 
+// Fotos enviadas do dispositivo chegam como data: URI (base64). Precisam da
+// coluna em MEDIUMTEXT (o TEXT padrão só aguenta ~64KB) e um limite de
+// tamanho pra não deixar alguém mandar uma imagem gigante sem querer.
+const MAX_IMAGE_DATA_URL_LENGTH = 2_000_000;
+async function prepareImageUrlForSave(imageUrl: string | null | undefined) {
+  if (imageUrl && imageUrl.startsWith("data:")) {
+    if (imageUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Foto muito grande. Tente uma imagem menor." });
+    }
+    await ensureProductImageColumnIsMediumtext();
+  }
+  return imageUrl;
+}
+
 const productsRouter = router({
   list: protectedProcedure
     .input(z.object({ includeInactive: z.boolean().optional() }).optional())
@@ -99,9 +114,13 @@ const productsRouter = router({
         currentStock: z.number().int().min(0),
         minimumStock: z.number().int().min(0),
         description: z.string().optional(),
+        imageUrl: z.string().optional().nullable(),
       })
     )
-    .mutation(({ input }) => createProduct(input)),
+    .mutation(async ({ input }) => {
+      const imageUrl = await prepareImageUrlForSave(input.imageUrl);
+      return createProduct({ ...input, imageUrl });
+    }),
 
   update: protectedProcedure
     .input(
@@ -114,10 +133,12 @@ const productsRouter = router({
         currentStock: z.number().int().min(0).optional(),
         minimumStock: z.number().int().min(0).optional(),
         description: z.string().optional(),
+        imageUrl: z.string().optional().nullable(),
       })
     )
-    .mutation(({ input }) => {
+    .mutation(async ({ input }) => {
       const { id, ...data } = input;
+      if (data.imageUrl !== undefined) data.imageUrl = await prepareImageUrlForSave(data.imageUrl);
       return updateProduct(id, data);
     }),
 

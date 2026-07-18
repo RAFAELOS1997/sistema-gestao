@@ -40,12 +40,41 @@ const emptyForm = {
   currentStock: "",
   minimumStock: "",
   description: "",
+  imageUrl: "" as string | null,
 };
+
+// Redimensiona/comprime a foto no navegador antes de enviar, pra não mandar
+// um arquivo gigante de celular direto pro banco.
+function resizeImageFile(file: File, maxDimension = 800, quality = 0.75): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error("Erro ao ler o arquivo"));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Arquivo não é uma imagem válida"));
+      img.onload = () => {
+        const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
+        const width = Math.round(img.width * scale);
+        const height = Math.round(img.height * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("Não foi possível processar a imagem")); return; }
+        ctx.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result as string;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function Products() {
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState(emptyForm);
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("todas");
@@ -173,6 +202,7 @@ export default function Products() {
       currentStock: product.currentStock.toString(),
       minimumStock: product.minimumStock.toString(),
       description: product.description ?? "",
+      imageUrl: product.imageUrl ?? "",
     });
     setOpen(true);
   };
@@ -218,11 +248,12 @@ export default function Products() {
     const minimumStock = parseInt(formData.minimumStock);
 
     try {
+      const imageUrl = formData.imageUrl?.trim() ? formData.imageUrl.trim() : null;
       if (editingId) {
-        await updateMutation.mutateAsync({ id: editingId, name: formData.name, category: formData.category, costPrice, salePrice, currentStock, minimumStock, description: formData.description });
+        await updateMutation.mutateAsync({ id: editingId, name: formData.name, category: formData.category, costPrice, salePrice, currentStock, minimumStock, description: formData.description, imageUrl });
         toast.success("Produto atualizado com sucesso!");
       } else {
-        await createMutation.mutateAsync({ name: formData.name, category: formData.category, costPrice, salePrice, currentStock, minimumStock, description: formData.description });
+        await createMutation.mutateAsync({ name: formData.name, category: formData.category, costPrice, salePrice, currentStock, minimumStock, description: formData.description, imageUrl });
         toast.success("Produto criado com sucesso!");
       }
       setOpen(false);
@@ -293,6 +324,65 @@ export default function Products() {
                   className="bg-background border-border text-foreground mt-1"
                   required
                 />
+              </div>
+
+              <div>
+                <Label className="text-foreground">Foto</Label>
+                <div className="flex items-center gap-3 mt-1">
+                  <div className="w-16 h-16 rounded border border-border bg-background flex items-center justify-center overflow-hidden shrink-0">
+                    {formData.imageUrl ? (
+                      <img src={formData.imageUrl} alt="Prévia" className="w-full h-full object-cover" />
+                    ) : (
+                      <Package className="w-6 h-6 text-muted-foreground opacity-40" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-2 min-w-0">
+                    <div className="flex gap-2">
+                      <label className="cursor-pointer">
+                        <span className="inline-flex items-center h-9 px-3 rounded-md border border-border text-sm text-foreground hover:bg-background transition-colors">
+                          {uploadingImage ? "Processando..." : "Enviar do dispositivo"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          disabled={uploadingImage}
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            e.target.value = "";
+                            if (!file) return;
+                            setUploadingImage(true);
+                            try {
+                              const dataUrl = await resizeImageFile(file);
+                              setFormData((prev) => ({ ...prev, imageUrl: dataUrl }));
+                            } catch (error: any) {
+                              toast.error(error?.message ?? "Erro ao processar a foto");
+                            } finally {
+                              setUploadingImage(false);
+                            }
+                          }}
+                        />
+                      </label>
+                      {formData.imageUrl && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-9 border-border text-muted-foreground"
+                          onClick={() => setFormData((prev) => ({ ...prev, imageUrl: "" }))}
+                        >
+                          Remover
+                        </Button>
+                      )}
+                    </div>
+                    <Input
+                      value={formData.imageUrl?.startsWith("data:") ? "" : formData.imageUrl ?? ""}
+                      onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+                      placeholder="ou cole o link de uma foto..."
+                      className="bg-background border-border text-foreground text-sm h-9"
+                    />
+                  </div>
+                </div>
               </div>
 
               <div>
