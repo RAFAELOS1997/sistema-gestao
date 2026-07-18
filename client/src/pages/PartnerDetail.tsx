@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ArrowLeft, Power } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import ConsignmentManager from "@/components/ConsignmentManager";
 
 const NO_TIER = "sem-plano";
 
@@ -272,6 +273,8 @@ export default function PartnerDetail() {
           )}
         </CardContent>
       </Card>
+
+      <ConsignmentManager terreiroId={terreiroId} />
     </div>
   );
 }

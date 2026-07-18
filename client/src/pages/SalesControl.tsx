@@ -150,7 +150,7 @@ export default function SalesControl() {
         `R$ ${(sale.unitPrice / 100).toFixed(2)}`,
         `R$ ${(sale.totalPrice / 100).toFixed(2)}`,
         `R$ ${(sale.profit / 100).toFixed(2)}`,
-        sale.channel === "fisico" ? "Físico" : "Instagram",
+        sale.channel === "fisico" ? "Físico" : sale.channel === "terreiro" ? "Terreiro" : "Instagram",
       ];
     });
 

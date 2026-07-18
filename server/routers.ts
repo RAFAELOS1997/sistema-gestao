@@ -79,6 +79,12 @@ import {
   setTerreiroProductPrice,
   removeTerreiroProductPrice,
   bulkFillTierPrices,
+  resolvePartnerPrice,
+  listConsignments,
+  countOpenConsignmentsByTerreiro,
+  createConsignment,
+  markConsignmentSold,
+  markConsignmentReturned,
 } from "./db";
 
 // O hash de senha (scrypt) nunca deve sair do servidor — sem isso, auth.me e
@@ -1408,6 +1414,69 @@ const terreirosRouter = router({
       .input(z.object({ terreiroId: z.number().int().positive(), productId: z.number().int().positive() }))
       .mutation(({ input }) => removeTerreiroProductPrice(input.terreiroId, input.productId)),
   }),
+
+  // Comodato: itens deixados no terreiro em dias de gira, sem pagamento
+  // prévio — pagos se vendidos ("marcar vendido" registra a venda no canal
+  // "terreiro"), devolvidos senão ("marcar devolvido" repõe o estoque).
+  consignments: router({
+    list: protectedProcedure
+      .input(z.object({ terreiroId: z.number().int().positive(), includeSettled: z.boolean().optional() }))
+      .query(({ input }) => listConsignments(input.terreiroId, input.includeSettled ?? false)),
+
+    openCountByTerreiro: protectedProcedure.query(() => countOpenConsignmentsByTerreiro()),
+
+    // Preço sugerido pro item na entrega (específico > plano > preço da loja)
+    suggestedPrice: protectedProcedure
+      .input(z.object({ terreiroId: z.number().int().positive(), productId: z.number().int().positive() }))
+      .query(({ input }) => resolvePartnerPrice(input.terreiroId, input.productId)),
+
+    create: protectedProcedure
+      .input(
+        z.object({
+          terreiroId: z.number().int().positive(),
+          productId: z.number().int().positive(),
+          quantity: z.number().int().positive(),
+          unitPrice: z.number().int().positive(),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        await createConsignment(input);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "consignment_created",
+          module: "partners",
+          description: `Comodato: ${input.quantity}x produto ${input.productId} deixado no terreiro ${input.terreiroId}`,
+        });
+        return { success: true };
+      }),
+
+    markSold: protectedProcedure
+      .input(z.object({ id: z.number().int().positive(), quantity: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        await markConsignmentSold(input.id, input.quantity);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "consignment_sold",
+          module: "partners",
+          description: `Comodato ID ${input.id}: ${input.quantity} item(ns) vendido(s)`,
+        });
+        return { success: true };
+      }),
+
+    markReturned: protectedProcedure
+      .input(z.object({ id: z.number().int().positive(), quantity: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        await markConsignmentReturned(input.id, input.quantity);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "consignment_returned",
+          module: "partners",
+          description: `Comodato ID ${input.id}: ${input.quantity} item(ns) devolvido(s)`,
+        });
+        return { success: true };
+      }),
+  }),
 });
 
 // ─── Portal do Parceiro (acesso dos terreiros) ────────────────────────────────
@@ -1451,6 +1520,13 @@ const portalRouter = router({
 
   products: router({
     list: terreiroProcedure.query(({ ctx }) => listPartnerVisibleProducts(ctx.terreiro.id, ctx.terreiro.tierId)),
+  }),
+
+  // Itens em comodato com ESTE terreiro (sessão dele) — inclui histórico.
+  consignments: router({
+    list: terreiroProcedure
+      .input(z.object({ includeSettled: z.boolean().optional() }).optional())
+      .query(({ ctx, input }) => listConsignments(ctx.terreiro.id, input?.includeSettled ?? false)),
   }),
 });
 

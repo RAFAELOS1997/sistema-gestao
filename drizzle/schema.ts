@@ -41,7 +41,7 @@ export const sales = mysqlTable("sales", {
   unitPrice: int("unitPrice").notNull(), // em centavos
   totalPrice: int("totalPrice").notNull(), // em centavos
   profit: int("profit").notNull(), // em centavos
-  channel: mysqlEnum("channel", ["fisico", "instagram"]).notNull().default("fisico"),
+  channel: mysqlEnum("channel", ["fisico", "instagram", "terreiro"]).notNull().default("fisico"),
   saleDate: timestamp("saleDate").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -285,3 +285,27 @@ export const terreiroProductPrices = mysqlTable("terreiroProductPrices", {
 
 export type TerreiroProductPrice = typeof terreiroProductPrices.$inferSelect;
 export type InsertTerreiroProductPrice = typeof terreiroProductPrices.$inferInsert;
+
+// ─── Comodato (itens deixados nos terreiros) ──────────────────────────────────
+// Em dias de gira, itens saem da loja e ficam no terreiro sem pagamento
+// prévio: pagos só se vendidos, senão devolvidos. O estoque baixa quando o
+// item sai e volta quando é devolvido; a venda registrada no acerto NÃO baixa
+// estoque de novo. unitPrice é o preço combinado no momento da entrega
+// (snapshot do preço do parceiro), pra o acerto não mudar se o plano mudar.
+
+export const consignments = mysqlTable("consignments", {
+  id: int("id").autoincrement().primaryKey(),
+  terreiroId: int("terreiroId").notNull(),
+  productId: int("productId").notNull(),
+  quantity: int("quantity").notNull(), // total deixado
+  quantitySold: int("quantitySold").notNull().default(0),
+  quantityReturned: int("quantityReturned").notNull().default(0),
+  unitPrice: int("unitPrice").notNull(), // em centavos — preço combinado na entrega
+  notes: text("notes"),
+  leftAt: timestamp("leftAt").defaultNow().notNull(), // quando foi deixado
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Consignment = typeof consignments.$inferSelect;
+export type InsertConsignment = typeof consignments.$inferInsert;

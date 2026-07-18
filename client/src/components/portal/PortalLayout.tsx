@@ -1,9 +1,16 @@
 import { usePartnerAuth } from "@/_core/hooks/usePartnerAuth";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
+import { useLocation } from "wouter";
+
+const NAV_ITEMS = [
+  { label: "Produtos", path: "/parceiros/produtos" },
+  { label: "Comodato", path: "/parceiros/comodato" },
+];
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
   const { loading, isAuthenticated, terreiro, logout } = usePartnerAuth({ redirectOnUnauthenticated: true });
+  const [location, setLocation] = useLocation();
 
   if (loading || !isAuthenticated) {
     return (
@@ -36,6 +43,21 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </Button>
           </div>
         </div>
+        <nav className="max-w-6xl mx-auto px-4 sm:px-6 flex gap-1 -mb-px">
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.path}
+              onClick={() => setLocation(item.path)}
+              className={`px-3 py-2 text-sm border-b-2 transition-colors ${
+                location === item.path
+                  ? "border-accent text-accent font-medium"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
       </header>
       <main className="max-w-6xl mx-auto p-4 sm:p-6">{children}</main>
     </div>
