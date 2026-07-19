@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { trpc } from "@/lib/trpc";
-import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch, PackagePlus, Check, Download } from "lucide-react";
+import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch, PackagePlus, Check, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
 import { ZoomableImage } from "@/components/ZoomableImage";
 
@@ -33,8 +33,11 @@ const STOCK_LABELS: Record<string, { label: string; className: string }> = {
 const centsToBRL = (cents: number) => `R$ ${(cents / 100).toFixed(2)}`;
 
 // Fornecedor Atacado de Umbanda (supplierId 1). Categorias do site mapeadas
-// para as categorias do sistema; a varredura final em /diversos pega o que
-// sobrar (produtos repetidos são ignorados pelo slug).
+// para as categorias do sistema. IMPORTANTE: /diversos NÃO é um catálogo
+// completo — a maioria dos produtos das categorias nomeadas não aparece lá
+// (verificado no site real), então TODA categoria do menu do site precisa
+// estar nesta lista. Produtos repetidos entre categorias são ignorados pelo
+// slug, então sobreposição é inofensiva.
 const IMPORT_SUPPLIER_ID = 1;
 const IMPORT_SOURCES: { path: string; category: string; label: string }[] = [
   { path: "guias", category: "guias", label: "Guias" },
@@ -105,6 +108,35 @@ const IMPORT_SOURCES: { path: string; category: string; label: string }[] = [
   { path: "morim", category: "vestuario", label: "Morim" },
   { path: "paramentas", category: "vestuario", label: "Paramentas" },
   { path: "couro-22846197", category: "vestuario", label: "Couro" },
+  { path: "box-25-unidades", category: "incensos", label: "Incenso box 25un" },
+  { path: "nirvana-orixas", category: "incensos", label: "Nirvana Orixás" },
+  { path: "nirvana-tarot", category: "incensos", label: "Nirvana Tarô" },
+  { path: "farinhas-22846202", category: "ervas", label: "Farinhas" },
+  { path: "favas-22846204", category: "ervas", label: "Favas" },
+  { path: "efum", category: "ervas", label: "Efum" },
+  { path: "contra-egum-23003405", category: "pulseiras", label: "Contra-egum" },
+  { path: "ides-23003438", category: "pulseiras", label: "Idês" },
+  { path: "firma-cristal-23088755", category: "pedras", label: "Firmas cristal" },
+  { path: "firma-opaca-23088818", category: "pedras", label: "Firmas opacas" },
+  { path: "firma-pitanga", category: "pedras", label: "Firmas pitanga" },
+  { path: "firma-pitanga-rajada", category: "pedras", label: "Firmas pitanga rajada" },
+  { path: "firmas-de-murano", category: "pedras", label: "Firmas de murano" },
+  { path: "firmas-metal-23217633", category: "pedras", label: "Firmas de metal" },
+  { path: "ogo", category: "ferramentas", label: "Ogós" },
+  { path: "barcos", category: "ferramentas", label: "Barcos" },
+  { path: "tabacaria", category: "outros", label: "Tabacaria" },
+  { path: "cachimbos", category: "outros", label: "Cachimbos" },
+  { path: "porta-cigarro", category: "outros", label: "Porta-cigarros" },
+  { path: "cinzeiros", category: "outros", label: "Cinzeiros" },
+  { path: "isqueiro-e-acendedor", category: "outros", label: "Isqueiros" },
+  { path: "bebidas", category: "outros", label: "Bebidas" },
+  { path: "figas", category: "outros", label: "Figas" },
+  { path: "chaveiros", category: "outros", label: "Chaveiros" },
+  { path: "enfeites", category: "outros", label: "Enfeites" },
+  { path: "penas", category: "outros", label: "Penas" },
+  { path: "acessorios", category: "outros", label: "Acessórios" },
+  { path: "acessorios-ciganos", category: "outros", label: "Acessórios ciganos" },
+  { path: "ofertas", category: "outros", label: "Ofertas" },
   { path: "diversos", category: "outros", label: "Demais produtos" },
 ];
 
@@ -131,6 +163,8 @@ export default function SupplierCatalog() {
   const [addingId, setAddingId] = useState<number | null>(null);
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState("");
+  const [stockFilter, setStockFilter] = useState<string>("todos");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const utils = trpc.useUtils();
   const { data: items, isLoading } = trpc.supplierCatalog.list.useQuery({});
@@ -151,6 +185,13 @@ export default function SupplierCatalog() {
     [items]
   );
 
+  // Contagem por categoria (aparece no dropdown, ajuda a ver o tamanho do catálogo)
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const item of items ?? []) counts[item.category] = (counts[item.category] ?? 0) + 1;
+    return counts;
+  }, [items]);
+
   const filtered = useMemo(() => {
     let list = items ?? [];
     if (search.trim()) {
@@ -160,13 +201,33 @@ export default function SupplierCatalog() {
     if (category !== "todas") {
       list = list.filter((item) => item.category === category);
     }
+    if (stockFilter === "disponivel") {
+      list = list.filter((item) => item.stockStatus === "disponivel");
+    } else if (stockFilter === "indisponivel") {
+      list = list.filter((item) => item.stockStatus === "indisponivel");
+    }
     const sorted = [...list];
     if (sortBy === "nome") sorted.sort((a, b) => a.name.localeCompare(b.name));
     if (sortBy === "preco-asc") sorted.sort((a, b) => a.price - b.price);
     if (sortBy === "preco-desc") sorted.sort((a, b) => b.price - a.price);
     if (sortBy === "atualizado") sorted.sort((a, b) => new Date(b.lastCheckedAt).getTime() - new Date(a.lastCheckedAt).getTime());
     return sorted;
-  }, [items, search, category, sortBy]);
+  }, [items, search, category, stockFilter, sortBy]);
+
+  // Paginação: renderizar 900+ cards de uma vez trava o navegador (principalmente
+  // no celular) — mostra em páginas de 24.
+  const PAGE_SIZE = 24;
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, category, stockFilter, sortBy]);
+  useEffect(() => {
+    if (currentPage > pageCount) setCurrentPage(pageCount);
+  }, [pageCount, currentPage]);
+  const pagedItems = useMemo(
+    () => filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
+    [filtered, currentPage]
+  );
 
   const handleRefresh = async (id: number) => {
     setRefreshingId(id);
@@ -314,20 +375,32 @@ export default function SupplierCatalog() {
               className="bg-background border-border text-foreground pl-9 h-11 text-base"
             />
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
             <Select value={category} onValueChange={setCategory}>
               <SelectTrigger className="bg-background border-border text-foreground h-11 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-card border-border">
-                <SelectItem value="todas">Todas as categorias</SelectItem>
+                <SelectItem value="todas">Todas as categorias ({(items ?? []).length})</SelectItem>
                 {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-                  <SelectItem key={value} value={value}>{label}</SelectItem>
+                  <SelectItem key={value} value={value}>
+                    {label} ({categoryCounts[value] ?? 0})
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            <Select value={sortBy} onValueChange={setSortBy}>
+            <Select value={stockFilter} onValueChange={setStockFilter}>
               <SelectTrigger className="bg-background border-border text-foreground h-11 w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-card border-border">
+                <SelectItem value="todos">Estoque: todos</SelectItem>
+                <SelectItem value="disponivel">Só disponíveis</SelectItem>
+                <SelectItem value="indisponivel">Só indisponíveis</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={setSortBy}>
+              <SelectTrigger className="bg-background border-border text-foreground h-11 w-full col-span-2 sm:col-span-1">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent className="bg-card border-border">
@@ -342,7 +415,11 @@ export default function SupplierCatalog() {
       </Card>
 
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <p className="text-sm text-muted-foreground font-medium">{filtered.length} produto(s) encontrado(s)</p>
+        <p className="text-sm text-muted-foreground font-medium">
+          {filtered.length} produto(s) encontrado(s)
+          {filtered.length > PAGE_SIZE &&
+            ` · mostrando ${(currentPage - 1) * PAGE_SIZE + 1}–${Math.min(currentPage * PAGE_SIZE, filtered.length)}`}
+        </p>
         <div className="flex items-center gap-2 flex-wrap">
         <Button
           size="sm"
@@ -380,7 +457,7 @@ export default function SupplierCatalog() {
         </Card>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-          {filtered.map((item) => {
+          {pagedItems.map((item) => {
             const stockInfo = STOCK_LABELS[item.stockStatus] ?? STOCK_LABELS.desconhecido;
             const editedValue = priceEdits[item.id];
             const alreadyMine = myProductNames.has(item.name.trim().toLowerCase());
@@ -417,7 +494,9 @@ export default function SupplierCatalog() {
                 <CardContent className="space-y-2 pt-0 pb-2.5 px-2.5 sm:px-3 flex-1 flex flex-col">
                   <div className="flex items-baseline justify-between text-xs sm:text-sm">
                     <span className="text-muted-foreground">Custo</span>
-                    <span className="text-foreground font-medium">{centsToBRL(item.price)}</span>
+                    <span className="text-foreground font-medium">
+                      {item.price > 0 ? centsToBRL(item.price) : "—"}
+                    </span>
                   </div>
 
                   <div className="rounded-lg bg-accent/10 border border-accent/20 p-2 space-y-1.5">
@@ -511,6 +590,34 @@ export default function SupplierCatalog() {
               </Card>
             );
           })}
+        </div>
+      )}
+
+      {pageCount > 1 && (
+        <div className="flex items-center justify-between pt-1 pb-2">
+          <p className="text-xs text-muted-foreground">Página {currentPage} de {pageCount}</p>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-border h-9"
+              disabled={currentPage <= 1}
+              onClick={() => { setCurrentPage((p) => Math.max(1, p - 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            >
+              <ChevronLeft className="w-4 h-4 mr-1" />
+              Anterior
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-border h-9"
+              disabled={currentPage >= pageCount}
+              onClick={() => { setCurrentPage((p) => Math.min(pageCount, p + 1)); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            >
+              Próxima
+              <ChevronRight className="w-4 h-4 ml-1" />
+            </Button>
+          </div>
         </div>
       )}
     </div>

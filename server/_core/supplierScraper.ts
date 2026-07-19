@@ -43,33 +43,38 @@ export async function fetchSupplierProductStatus(url: string): Promise<SupplierP
 }
 
 // Busca uma página de listagem de categoria do fornecedor e extrai os
-// produtos (nome, slug, preço e foto). Páginas cheias têm 40 itens;
-// menos que isso (ou zero) indica a última página.
+// produtos (nome, slug, preço, foto e disponibilidade). Produtos
+// indisponíveis não têm preço no HTML (o site troca o preço por um botão
+// "Avise-me"), então priceCents pode ser null — o import registra esses
+// itens mesmo assim, com status indisponível.
 export type SupplierListingItem = {
   name: string;
   slug: string;
-  priceCents: number;
+  priceCents: number | null;
   imageUrl: string | null;
+  unavailable: boolean;
 };
 
 const SUPPLIER_BASE = "https://www.atacadodeumbanda.com.br/";
 
 function parseListingItems(html: string): SupplierListingItem[] {
   const items: SupplierListingItem[] = [];
-  const blockRe = /<div class="listagem-item prod-id-(\d+)[^"]*"[\s\S]*?(?=<div class="listagem-item prod-id-|<\/ul>)/g;
+  const blockRe = /<div class="listagem-item prod-id-(\d+)([^"]*)"[\s\S]*?(?=<div class="listagem-item prod-id-|<\/ul>)/g;
   let m: RegExpExecArray | null;
   while ((m = blockRe.exec(html)) !== null) {
     const block = m[0];
+    const blockClasses = m[2] ?? "";
     const nameMatch = block.match(/class="nome-produto[^"]*">([^<]+)</);
     const hrefMatch = block.match(/<a href="([^"]+)" class="nome-produto/);
     const priceMatch = block.match(/data-sell-price="([\d.]+)"/);
     const imgMatch = block.match(/<img[^>]+src="([^"]+)"/);
-    if (!nameMatch || !hrefMatch || !priceMatch) continue;
+    if (!nameMatch || !hrefMatch) continue;
     items.push({
       name: nameMatch[1].trim(),
       slug: hrefMatch[1].replace(SUPPLIER_BASE, ""),
-      priceCents: Math.round(parseFloat(priceMatch[1]) * 100),
+      priceCents: priceMatch ? Math.round(parseFloat(priceMatch[1]) * 100) : null,
       imageUrl: imgMatch ? imgMatch[1] : null,
+      unavailable: blockClasses.includes("indisponivel"),
     });
   }
   return items;
@@ -78,7 +83,7 @@ function parseListingItems(html: string): SupplierListingItem[] {
 export async function fetchSupplierListingPage(
   categoryPath: string,
   page: number
-): Promise<SupplierListingItem[]> {
+): Promise<{ items: SupplierListingItem[]; hasNext: boolean }> {
   const sep = categoryPath.includes("?") ? "&" : "?";
   const url = page === 1
     ? `${SUPPLIER_BASE}${categoryPath}`
@@ -89,9 +94,15 @@ export async function fetchSupplierListingPage(
       "user-agent": "Mozilla/5.0 (compatible; TocaDaPanteraCatalogBot/1.0)",
     },
   });
-  if (!response.ok) return [];
+  if (!response.ok) return { items: [], hasNext: false };
 
-  return parseListingItems(await response.text());
+  const html = await response.text();
+  const items = parseListingItems(html);
+  // Fim de paginação detectado pelo link "próxima página" no HTML — não pela
+  // contagem de itens: uma página cheia pode ter itens que o parser pula
+  // (ex.: indisponíveis), e contar itens fazia a varredura parar cedo demais.
+  const hasNext = items.length > 0 && html.includes(`pagina=${page + 1}`);
+  return { items, hasNext };
 }
 
 // Busca produtos direto na busca do site do fornecedor (usado quando o nome

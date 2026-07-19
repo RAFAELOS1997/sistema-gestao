@@ -1128,7 +1128,7 @@ const supplierCatalogRouter = router({
       let nextPage: number | null = input.startPage;
 
       for (let i = 0; i < MAX_PAGES_PER_CALL && nextPage; i++) {
-        const items = await fetchSupplierListingPage(input.categoryPath, nextPage);
+        const { items, hasNext } = await fetchSupplierListingPage(input.categoryPath, nextPage);
         if (items.length === 0) {
           nextPage = null;
           break;
@@ -1146,16 +1146,22 @@ const supplierCatalogRouter = router({
               sourceSlug: item.slug,
               sourceUrl: "https://www.atacadodeumbanda.com.br/" + item.slug,
               imageUrl: item.imageUrl,
-              price: item.priceCents,
-              suggestedSalePrice: suggestSalePrice(item.priceCents),
-              stockStatus: "desconhecido" as const,
+              // Produto indisponível não mostra preço na listagem — entra com
+              // preço zerado e sem sugestão; o botão "Atualizar" (ou uma nova
+              // importação quando ele voltar ao estoque) preenche depois.
+              price: item.priceCents ?? 0,
+              suggestedSalePrice: item.priceCents ? suggestSalePrice(item.priceCents) : null,
+              stockStatus: item.unavailable
+                ? ("indisponivel" as const)
+                : item.priceCents !== null
+                  ? ("disponivel" as const)
+                  : ("desconhecido" as const),
             }))
           );
           inserted += fresh.length;
         }
 
-        // Páginas cheias têm 40 itens; menos que isso é a última página
-        if (items.length < 40) {
+        if (!hasNext) {
           nextPage = null;
         } else {
           nextPage += 1;
