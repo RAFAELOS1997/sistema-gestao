@@ -249,28 +249,22 @@ export type InsertTerreiro = typeof terreiros.$inferInsert;
 // compra) e cada plano tem seu próprio preço por produto. Produto sem preço
 // cadastrado no plano do terreiro fica escondido pra ele.
 
+// Planos fixos (Cobre/Bronze/Prata/Ouro/Diamante) — cada um com um percentual
+// de desconto fixo sobre o preço de venda da loja. O preço do terreiro nesse
+// plano é sempre calculado na hora (salePrice * (1 - discountPercent/100)),
+// nunca guardado por produto — assim fica automaticamente correto pra
+// produto novo e atualizado sozinho quando o preço de venda muda.
 export const partnerTiers = mysqlTable("partnerTiers", {
   id: int("id").autoincrement().primaryKey(),
   name: varchar("name", { length: 100 }).notNull().unique(),
   sortOrder: int("sortOrder").notNull().default(0), // menor = plano mais básico
+  discountPercent: int("discountPercent").notNull().default(0),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type PartnerTier = typeof partnerTiers.$inferSelect;
 export type InsertPartnerTier = typeof partnerTiers.$inferInsert;
-
-export const tierProductPrices = mysqlTable("tierProductPrices", {
-  id: int("id").autoincrement().primaryKey(),
-  tierId: int("tierId").notNull(),
-  productId: int("productId").notNull(),
-  price: int("price").notNull(), // em centavos — preço desse produto nesse plano
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
-export type TierProductPrice = typeof tierProductPrices.$inferSelect;
-export type InsertTierProductPrice = typeof tierProductPrices.$inferInsert;
 
 // Sobrescreve o preço do plano só pra um terreiro específico (ex: negociação
 // pontual). Quando existe, tem prioridade sobre o preço do plano dele.

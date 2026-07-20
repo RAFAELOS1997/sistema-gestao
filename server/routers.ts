@@ -69,16 +69,10 @@ import {
   listPartnerVisibleProducts,
   listPartnerTiers,
   getPartnerTierById,
-  createPartnerTier,
-  updatePartnerTier,
-  deletePartnerTier,
-  listTierProductPrices,
-  setTierProductPrice,
-  removeTierProductPrice,
+  updatePartnerTierDiscount,
   listTerreiroProductPrices,
   setTerreiroProductPrice,
   removeTerreiroProductPrice,
-  bulkFillTierPrices,
   resolvePartnerPrice,
   listConsignments,
   countOpenConsignmentsByTerreiro,
@@ -1536,90 +1530,28 @@ const portalRouter = router({
   }),
 });
 
-// ─── Planos de Parceria (Prata/Ouro/Diamante) ─────────────────────────────────
-// Cada plano tem seu próprio preço por produto. Produto sem preço cadastrado
-// no plano fica escondido pro terreiro daquele plano (mérito: quanto mais o
-// terreiro compra, mais o admin promove ele de plano).
+// ─── Planos de Parceria (Cobre/Bronze/Prata/Ouro/Diamante) ────────────────────
+// 5 planos fixos, cada um com um percentual de desconto fixo sobre o preço de
+// venda da loja. O preço do terreiro é sempre calculado na hora a partir
+// desse desconto — não existe mais preço manual por produto dentro do plano,
+// então cadastro de produto novo e mudança de preço já refletem sozinhos.
 
 const partnerTiersRouter = router({
   list: protectedProcedure.query(() => listPartnerTiers()),
 
-  create: protectedProcedure
-    .input(z.object({ name: z.string().min(1), sortOrder: z.number().int().min(0).default(0) }))
+  // Só o percentual de desconto é editável — os 5 planos e sua ordem são fixos.
+  updateDiscount: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), discountPercent: z.number().int().min(0).max(99) }))
     .mutation(async ({ input, ctx }) => {
-      const result = await createPartnerTier(input);
-      await createAuditLog({
-        userId: ctx.user.id,
-        action: "partner_tier_created",
-        module: "partners",
-        description: `Plano "${input.name}" criado`,
-      });
-      return result;
-    }),
-
-  update: protectedProcedure
-    .input(z.object({ id: z.number().int().positive(), name: z.string().min(1).optional(), sortOrder: z.number().int().min(0).optional() }))
-    .mutation(async ({ input, ctx }) => {
-      const { id, ...data } = input;
-      await updatePartnerTier(id, data);
+      await updatePartnerTierDiscount(input.id, input.discountPercent);
       await createAuditLog({
         userId: ctx.user.id,
         action: "partner_tier_updated",
         module: "partners",
-        description: `Plano ID ${id} atualizado`,
+        description: `Desconto do plano ID ${input.id} alterado para ${input.discountPercent}%`,
       });
       return { success: true };
     }),
-
-  delete: protectedProcedure
-    .input(z.object({ id: z.number().int().positive() }))
-    .mutation(async ({ input, ctx }) => {
-      await deletePartnerTier(input.id);
-      await createAuditLog({
-        userId: ctx.user.id,
-        action: "partner_tier_deleted",
-        module: "partners",
-        description: `Plano ID ${input.id} excluído`,
-      });
-      return { success: true };
-    }),
-
-  // Preços por produto dentro de um plano — produto sem preço fica escondido.
-  prices: router({
-    list: protectedProcedure
-      .input(z.object({ tierId: z.number().int().positive() }))
-      .query(({ input }) => listTierProductPrices(input.tierId)),
-
-    setPrice: protectedProcedure
-      .input(z.object({ tierId: z.number().int().positive(), productId: z.number().int().positive(), price: z.number().int().positive() }))
-      .mutation(({ input }) => setTierProductPrice(input.tierId, input.productId, input.price)),
-
-    removePrice: protectedProcedure
-      .input(z.object({ tierId: z.number().int().positive(), productId: z.number().int().positive() }))
-      .mutation(({ input }) => removeTierProductPrice(input.tierId, input.productId)),
-
-    // Preenche o plano inteiro de uma vez a partir do preço de venda da loja
-    // com um desconto % (negativo = acréscimo). overwrite=false preserva os
-    // preços já definidos manualmente.
-    bulkFill: protectedProcedure
-      .input(
-        z.object({
-          tierId: z.number().int().positive(),
-          discountPercent: z.number().min(-100).max(99),
-          overwrite: z.boolean().default(false),
-        })
-      )
-      .mutation(async ({ input, ctx }) => {
-        const result = await bulkFillTierPrices(input.tierId, input.discountPercent, input.overwrite);
-        await createAuditLog({
-          userId: ctx.user.id,
-          action: "partner_tier_bulk_fill",
-          module: "partners",
-          description: `Plano ID ${input.tierId}: ${result.updated} preços preenchidos (desconto ${input.discountPercent}%, ${input.overwrite ? "sobrescrevendo" : "só vazios"})`,
-        });
-        return result;
-      }),
-  }),
 });
 
 // ─── App Router ───────────────────────────────────────────────────────────────

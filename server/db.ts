@@ -6,7 +6,7 @@ import {
   roles, permissions, rolePermissions, userRoles, auditLog, systemConfig,
   supplierCatalog, InsertSupplierCatalogItem,
   terreiros, InsertTerreiro,
-  partnerTiers, InsertPartnerTier, tierProductPrices, InsertTierProductPrice,
+  partnerTiers,
   terreiroProductPrices,
   consignments,
 } from "../drizzle/schema";
@@ -184,6 +184,7 @@ export async function runStartupMigrations() {
         id int AUTO_INCREMENT NOT NULL,
         name varchar(100) NOT NULL,
         sortOrder int NOT NULL DEFAULT 0,
+        discountPercent int NOT NULL DEFAULT 0,
         createdAt timestamp NOT NULL DEFAULT (now()),
         updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
@@ -193,21 +194,19 @@ export async function runStartupMigrations() {
   } catch (error: any) {
     console.error("[migrations] partnerTiers:", error);
   }
-
   try {
-    await db.execute(sql`
-      CREATE TABLE IF NOT EXISTS tierProductPrices (
-        id int AUTO_INCREMENT NOT NULL,
-        tierId int NOT NULL,
-        productId int NOT NULL,
-        price int NOT NULL,
-        createdAt timestamp NOT NULL DEFAULT (now()),
-        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
-        PRIMARY KEY (id)
-      )
-    `);
+    await db.execute(sql`ALTER TABLE partnerTiers ADD COLUMN discountPercent int NOT NULL DEFAULT 0`);
   } catch (error: any) {
-    console.error("[migrations] tierProductPrices:", error);
+    if (!isDupColumn(error)) console.error("[migrations] partnerTiers.discountPercent:", error);
+  }
+
+  // Planos deixaram de ter preço manual por produto — cada um agora tem um
+  // desconto % fixo sobre o preço de venda, calculado na hora. A tabela
+  // antiga não é mais usada.
+  try {
+    await db.execute(sql`DROP TABLE IF EXISTS tierProductPrices`);
+  } catch (error: any) {
+    console.error("[migrations] drop tierProductPrices:", error);
   }
 
   try {
@@ -251,6 +250,12 @@ export async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE sales MODIFY COLUMN channel enum('fisico','instagram','terreiro') NOT NULL DEFAULT 'fisico'`);
   } catch (error: any) {
     console.error("[migrations] sales.channel terreiro:", error);
+  }
+
+  try {
+    await seedPartnerTiers();
+  } catch (error: any) {
+    console.error("[migrations] seedPartnerTiers:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -802,23 +807,27 @@ export async function touchTerreiroLastSignedIn(id: number) {
 // só os que têm preço cadastrado (preço específico do terreiro OU preço do
 // plano dele — produto sem nenhum dos dois fica escondido). O preço
 // específico do terreiro tem prioridade sobre o do plano. Nunca inclui custo.
+// Preço do terreiro nesse plano pra um produto: sempre calculado a partir do
+// preço de venda da loja, nunca guardado — assim fica automaticamente em dia
+// quando o preço muda ou um produto novo é cadastrado.
+const tierPriceExpr = (discountPercentCol: any) =>
+  sql<number>`round(${products.salePrice} * (1 - ${discountPercentCol} / 100))`;
+
 export async function listPartnerVisibleProducts(terreiroId: number, tierId: number | null) {
   const db = await getDb();
   if (!db) return [];
-  const tierJoinCondition = tierId
-    ? and(eq(tierProductPrices.productId, products.id), eq(tierProductPrices.tierId, tierId))
-    : sql`false`;
+  const tierJoinCondition = tierId ? eq(partnerTiers.id, tierId) : sql`false`;
   return db
     .select({
       id: products.id,
       name: products.name,
       category: products.category,
-      salePrice: sql<number>`coalesce(${terreiroProductPrices.price}, ${tierProductPrices.price})`,
+      salePrice: sql<number>`coalesce(${terreiroProductPrices.price}, ${tierPriceExpr(partnerTiers.discountPercent)})`,
       currentStock: products.currentStock,
       imageUrl: products.imageUrl,
     })
     .from(products)
-    .leftJoin(tierProductPrices, tierJoinCondition)
+    .leftJoin(partnerTiers, tierJoinCondition)
     .leftJoin(
       terreiroProductPrices,
       and(eq(terreiroProductPrices.productId, products.id), eq(terreiroProductPrices.terreiroId, terreiroId))
@@ -827,34 +836,32 @@ export async function listPartnerVisibleProducts(terreiroId: number, tierId: num
       and(
         eq(products.isActive, 1),
         gte(products.currentStock, 1),
-        or(isNotNull(tierProductPrices.price), isNotNull(terreiroProductPrices.price))
+        or(isNotNull(partnerTiers.discountPercent), isNotNull(terreiroProductPrices.price))
       )
     )
     .orderBy(products.name);
 }
 
 // Preços de um terreiro específico: todos os produtos ativos, com o preço do
-// plano dele como referência e o preço específico (se sobrescrito). Usado na
-// página de gestão individual do terreiro.
+// plano dele (calculado a partir do desconto do plano) como referência e o
+// preço específico (se sobrescrito). Usado na página de gestão individual.
 export async function listTerreiroProductPrices(terreiroId: number) {
   const db = await getDb();
   if (!db) return [];
   const terreiro = await getTerreiroById(terreiroId);
   const tierId = terreiro?.tierId ?? null;
-  const tierJoinCondition = tierId
-    ? and(eq(tierProductPrices.productId, products.id), eq(tierProductPrices.tierId, tierId))
-    : sql`false`;
+  const tierJoinCondition = tierId ? eq(partnerTiers.id, tierId) : sql`false`;
   return db
     .select({
       productId: products.id,
       name: products.name,
       category: products.category,
       currentStock: products.currentStock,
-      tierPrice: tierProductPrices.price,
+      tierPrice: tierId ? tierPriceExpr(partnerTiers.discountPercent) : sql<number | null>`null`,
       overridePrice: terreiroProductPrices.price,
     })
     .from(products)
-    .leftJoin(tierProductPrices, tierJoinCondition)
+    .leftJoin(partnerTiers, tierJoinCondition)
     .leftJoin(
       terreiroProductPrices,
       and(eq(terreiroProductPrices.productId, products.id), eq(terreiroProductPrices.terreiroId, terreiroId))
@@ -886,7 +893,36 @@ export async function removeTerreiroProductPrice(terreiroId: number, productId: 
     .where(and(eq(terreiroProductPrices.terreiroId, terreiroId), eq(terreiroProductPrices.productId, productId)));
 }
 
-// ─── Planos de Parceria (Prata/Ouro/Diamante) ─────────────────────────────────
+// ─── Planos de Parceria (Cobre/Bronze/Prata/Ouro/Diamante) ────────────────────
+// Planos fixos — não são criados/excluídos pela UI, só semeados no boot (ver
+// seedPartnerTiers). O admin só pode ajustar o percentual de desconto.
+
+export const FIXED_PARTNER_TIERS = [
+  { name: "Cobre", sortOrder: 1, discountPercent: 3 },
+  { name: "Bronze", sortOrder: 2, discountPercent: 5 },
+  { name: "Prata", sortOrder: 3, discountPercent: 10 },
+  { name: "Ouro", sortOrder: 4, discountPercent: 15 },
+  { name: "Diamante", sortOrder: 5, discountPercent: 20 },
+] as const;
+
+// Garante que os 5 planos fixos existam com o sortOrder certo — chamado no
+// boot do servidor. NÃO mexe no discountPercent de planos já existentes
+// (preserva ajuste manual feito pelo admin); só corrige nome/ordem e cria o
+// que estiver faltando.
+export async function seedPartnerTiers() {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(partnerTiers);
+  const byName = new Map(existing.map((t) => [t.name, t]));
+  for (const fixedTier of FIXED_PARTNER_TIERS) {
+    const current = byName.get(fixedTier.name);
+    if (!current) {
+      await db.insert(partnerTiers).values(fixedTier);
+    } else if (current.sortOrder !== fixedTier.sortOrder) {
+      await db.update(partnerTiers).set({ sortOrder: fixedTier.sortOrder }).where(eq(partnerTiers.id, current.id));
+    }
+  }
+}
 
 export async function listPartnerTiers() {
   const db = await getDb();
@@ -901,103 +937,11 @@ export async function getPartnerTierById(id: number) {
   return result[0] ?? null;
 }
 
-export async function createPartnerTier(data: Omit<InsertPartnerTier, "id" | "createdAt" | "updatedAt">) {
+// Só o percentual de desconto é editável — nome/ordem dos planos são fixos.
+export async function updatePartnerTierDiscount(id: number, discountPercent: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.insert(partnerTiers).values(data);
-}
-
-export async function updatePartnerTier(id: number, data: Partial<Omit<InsertPartnerTier, "id" | "createdAt" | "updatedAt">>) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db.update(partnerTiers).set(data).where(eq(partnerTiers.id, id));
-}
-
-export async function deletePartnerTier(id: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const inUse = await db.select({ id: terreiros.id }).from(terreiros).where(eq(terreiros.tierId, id)).limit(1);
-  if (inUse.length > 0) throw new Error("Existem terreiros nesse plano — mude o plano deles antes de excluir");
-  await db.delete(tierProductPrices).where(eq(tierProductPrices.tierId, id));
-  await db.delete(partnerTiers).where(eq(partnerTiers.id, id));
-}
-
-// Preços de um plano: todos os produtos ativos, com o preço do plano quando
-// já foi definido (null = ainda escondido pro terreiro daquele plano).
-export async function listTierProductPrices(tierId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select({
-      productId: products.id,
-      name: products.name,
-      category: products.category,
-      currentStock: products.currentStock,
-      price: tierProductPrices.price,
-    })
-    .from(products)
-    .leftJoin(
-      tierProductPrices,
-      and(eq(tierProductPrices.productId, products.id), eq(tierProductPrices.tierId, tierId))
-    )
-    .where(eq(products.isActive, 1))
-    .orderBy(products.name);
-}
-
-export async function setTierProductPrice(tierId: number, productId: number, price: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const existing = await db
-    .select({ id: tierProductPrices.id })
-    .from(tierProductPrices)
-    .where(and(eq(tierProductPrices.tierId, tierId), eq(tierProductPrices.productId, productId)))
-    .limit(1);
-  if (existing[0]) {
-    await db.update(tierProductPrices).set({ price }).where(eq(tierProductPrices.id, existing[0].id));
-  } else {
-    await db.insert(tierProductPrices).values({ tierId, productId, price });
-  }
-}
-
-export async function removeTierProductPrice(tierId: number, productId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  await db
-    .delete(tierProductPrices)
-    .where(and(eq(tierProductPrices.tierId, tierId), eq(tierProductPrices.productId, productId)));
-}
-
-// Preenche os preços de um plano em massa a partir do preço de venda da loja,
-// com um desconto percentual (negativo = acréscimo). Com overwrite=false só
-// preenche produtos que ainda não têm preço no plano — os já negociados um a
-// um ficam intocados.
-export async function bulkFillTierPrices(tierId: number, discountPercent: number, overwrite: boolean) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-
-  const activeProducts = await db
-    .select({ id: products.id, salePrice: products.salePrice })
-    .from(products)
-    .where(eq(products.isActive, 1));
-  const existing = await db
-    .select({ productId: tierProductPrices.productId })
-    .from(tierProductPrices)
-    .where(eq(tierProductPrices.tierId, tierId));
-  const alreadyPriced = new Set(existing.map((row) => row.productId));
-
-  const factor = 1 - discountPercent / 100;
-  let updated = 0;
-  let skipped = 0;
-  for (const product of activeProducts) {
-    if (!overwrite && alreadyPriced.has(product.id)) {
-      skipped++;
-      continue;
-    }
-    const price = Math.max(1, Math.round(product.salePrice * factor));
-    await setTierProductPrice(tierId, product.id, price);
-    updated++;
-  }
-  return { updated, skipped };
+  await db.update(partnerTiers).set({ discountPercent }).where(eq(partnerTiers.id, id));
 }
 
 // ─── Comodato (itens deixados nos terreiros) ──────────────────────────────────
@@ -1016,18 +960,15 @@ export async function resolvePartnerPrice(terreiroId: number, productId: number)
     .limit(1);
   if (override[0]) return override[0].price;
 
-  const terreiro = await getTerreiroById(terreiroId);
-  if (terreiro?.tierId) {
-    const tierPrice = await db
-      .select({ price: tierProductPrices.price })
-      .from(tierProductPrices)
-      .where(and(eq(tierProductPrices.tierId, terreiro.tierId), eq(tierProductPrices.productId, productId)))
-      .limit(1);
-    if (tierPrice[0]) return tierPrice[0].price;
-  }
-
   const product = await getProductById(productId);
   if (!product) throw new Error("Produto não encontrado");
+
+  const terreiro = await getTerreiroById(terreiroId);
+  if (terreiro?.tierId) {
+    const tier = await getPartnerTierById(terreiro.tierId);
+    if (tier) return Math.round(product.salePrice * (1 - tier.discountPercent / 100));
+  }
+
   return product.salePrice;
 }
 
