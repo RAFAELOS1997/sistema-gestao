@@ -39,9 +39,9 @@ export default function PortalProducts() {
   }, [products, search, category]);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5 sm:space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Produtos em Estoque</h1>
+        <h1 className="text-xl sm:text-3xl font-bold text-foreground">Produtos em Estoque</h1>
         <p className="text-muted-foreground text-sm">
           Confira o que está disponível e o preço de venda
           {!productsQuery.isLoading && products.length > 0 && (
@@ -50,20 +50,20 @@ export default function PortalProducts() {
         </p>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="flex flex-col gap-3">
+        <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar produto..."
-            className="pl-9"
+            className="pl-9 h-10 text-base"
           />
         </div>
-        <div className="flex gap-2 overflow-x-auto pb-1 sm:pb-0">
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 sm:mx-0 sm:px-0">
           <button
             onClick={() => setCategory("todas")}
-            className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap border transition-colors ${
+            className={`px-3 py-2 rounded-lg text-sm whitespace-nowrap border transition-colors shrink-0 ${
               category === "todas" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:bg-accent/10"
             }`}
           >
@@ -73,7 +73,7 @@ export default function PortalProducts() {
             <button
               key={cat}
               onClick={() => setCategory(cat)}
-              className={`px-3 py-1.5 rounded-lg text-sm whitespace-nowrap border transition-colors ${
+              className={`px-3 py-2 rounded-lg text-sm whitespace-nowrap border transition-colors shrink-0 ${
                 category === cat ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:bg-accent/10"
               }`}
             >
@@ -84,28 +84,35 @@ export default function PortalProducts() {
       </div>
 
       {productsQuery.isLoading ? (
-        <div className="text-center py-8 text-muted-foreground">Carregando produtos...</div>
+        <div className="text-center py-10 text-muted-foreground text-sm">Carregando produtos...</div>
       ) : products.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground max-w-md mx-auto">
+        <div className="text-center py-12 px-4 text-muted-foreground text-sm max-w-md mx-auto">
           Ainda não há produtos liberados para o seu plano. Fale com a Toca da Pantera — assim que seu plano tiver
           preços definidos, os produtos aparecem aqui.
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">Nenhum produto encontrado</div>
+        <div className="text-center py-10 text-muted-foreground text-sm">Nenhum produto encontrado</div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {filtered.map((product) => (
-            <div key={product.id} className="p-3 bg-card border border-border rounded-lg">
-              <div className="mb-2 h-24 bg-background rounded flex items-center justify-center text-muted-foreground text-sm overflow-hidden">
+            <div
+              key={product.id}
+              className="bg-card border border-border rounded-lg overflow-hidden flex flex-col"
+            >
+              <div className="aspect-square bg-background flex items-center justify-center text-muted-foreground text-xs overflow-hidden">
                 {product.imageUrl ? (
                   <ZoomableImage src={product.imageUrl} alt={product.name} className="w-full h-full" />
                 ) : (
-                  (CATEGORY_LABELS[product.category] ?? product.category).toUpperCase()
+                  <span className="px-2 text-center">{(CATEGORY_LABELS[product.category] ?? product.category).toUpperCase()}</span>
                 )}
               </div>
-              <h3 className="font-semibold text-sm text-foreground leading-snug min-h-[2.5rem]">{product.name}</h3>
-              <p className="text-xs mt-0.5 text-muted-foreground">Em estoque: {product.currentStock}</p>
-              <p className="text-lg font-bold mt-1 text-accent">R$ {(product.salePrice / 100).toFixed(2)}</p>
+              <div className="p-2.5 sm:p-3 flex flex-col flex-1">
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground leading-snug line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] break-words">
+                  {product.name}
+                </h3>
+                <p className="text-[11px] sm:text-xs mt-1 text-muted-foreground">Em estoque: {product.currentStock}</p>
+                <p className="text-base sm:text-lg font-bold mt-1 text-accent">R$ {(product.salePrice / 100).toFixed(2)}</p>
+              </div>
             </div>
           ))}
         </div>

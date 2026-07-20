@@ -155,7 +155,97 @@ export default function PriceReview() {
               <p>Nenhum produto aguardando revisão de preço.</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Cards no celular */}
+            <div className="md:hidden space-y-2 sm:space-y-3">
+              {visible.map((product) => {
+                const editedValue = edits[product.id];
+                const currentSaleCents =
+                  editedValue !== undefined ? inputToCents(editedValue) : product.salePrice;
+                const margin =
+                  currentSaleCents > 0
+                    ? Math.round(((currentSaleCents - product.costPrice) / currentSaleCents) * 100)
+                    : 0;
+                const needsReview = product.salePrice === product.costPrice;
+                return (
+                  <div key={product.id} className="p-3 bg-background rounded-lg border border-border space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground leading-snug">
+                        {product.name}
+                        {needsReview && (
+                          <Badge variant="outline" className="ml-2 border-yellow-700 text-yellow-400 text-xs align-middle">
+                            revisar
+                          </Badge>
+                        )}
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <Badge variant="outline" className="border-accent/40 text-accent">
+                        {CATEGORY_LABELS[product.category] ?? product.category}
+                      </Badge>
+                      <span>Custo: R$ {centsToInput(product.costPrice)}</span>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 flex-1 text-xs border-accent/30 text-accent hover:bg-accent/10"
+                        onClick={() => applyMarkup(product.id, product.costPrice, 1.5)}
+                      >
+                        +50%
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 flex-1 text-xs border-accent/30 text-accent hover:bg-accent/10"
+                        onClick={() => applyMarkup(product.id, product.costPrice, 2)}
+                      >
+                        x2
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-9 flex-1 text-xs border-accent/30 text-accent hover:bg-accent/10"
+                        onClick={() => applyMarkup(product.id, product.costPrice, 3)}
+                      >
+                        x3
+                      </Button>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <div className="flex-1">
+                        <Label className="text-xs text-muted-foreground mb-1 block">Preço de venda</Label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={editedValue ?? centsToInput(product.salePrice)}
+                          onChange={(e) => setPrice(product.id, e.target.value)}
+                          className="bg-card border-border text-foreground h-9 text-right"
+                        />
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => saveOne(product.id, product.salePrice)}
+                        disabled={savingId === product.id || editedValue === undefined}
+                        className="h-9 bg-accent text-accent-foreground hover:bg-accent/90 self-end"
+                      >
+                        {savingId === product.id ? "..." : "Salvar"}
+                      </Button>
+                    </div>
+                    <div className="text-right text-sm">
+                      <span className="text-muted-foreground">Margem: </span>
+                      <span className="text-accent font-bold">{margin}%</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tabela no computador */}
+            <div className="overflow-x-auto hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
@@ -254,6 +344,7 @@ export default function PriceReview() {
                 </TableBody>
               </Table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -249,7 +249,75 @@ export default function Receipts() {
               <p className="text-xs mt-1">Os recibos aparecem aqui após finalizar vendas</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            {/* Cards no celular */}
+            <div className="md:hidden space-y-2 sm:space-y-3">
+              {receipts.map((receipt: any) => {
+                const items = parseItems(receipt.items);
+                return (
+                  <div key={receipt.id} className="p-3 bg-background rounded-lg border border-border space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="font-mono text-sm text-foreground">
+                        #{formatReceiptNumber(receipt.receiptNumber)}
+                      </span>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {formatDate(receipt.createdAt)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="flex items-center gap-2">
+                        {items.length} {items.length === 1 ? "item" : "itens"}
+                        {receipt.notes && (
+                          <Badge variant="outline" className="text-xs border-accent/50 text-accent">
+                            Obs
+                          </Badge>
+                        )}
+                      </span>
+                      <Badge variant="secondary" className="text-xs">
+                        {paymentMethodLabel(receipt.paymentMethod)}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between pt-1">
+                      <span className="font-semibold text-accent">
+                        {formatCurrency(receipt.total)}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { setSelectedReceipt(receipt); setShowDetail(true); }}
+                          className="h-9 w-9 p-0 text-muted-foreground hover:text-foreground"
+                          title="Visualizar"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handlePrint(receipt)}
+                          className="h-9 w-9 p-0 text-muted-foreground hover:text-foreground"
+                          title="Imprimir"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDownload(receipt)}
+                          className="h-9 w-9 p-0 text-muted-foreground hover:text-foreground"
+                          title="Baixar"
+                        >
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tabela no computador */}
+            <div className="overflow-x-auto hidden md:block">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border">
@@ -325,6 +393,7 @@ export default function Receipts() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
         </CardContent>
       </Card>

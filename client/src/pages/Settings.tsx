@@ -94,23 +94,23 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-background p-6">
+    <div className="min-h-screen bg-background p-4 sm:p-6">
       <div className="max-w-6xl mx-auto">
-        <div className="flex items-center gap-3 mb-8">
-          <SettingsIcon className="h-8 w-8 text-accent" />
+        <div className="flex items-center gap-3 mb-6 sm:mb-8">
+          <SettingsIcon className="h-7 w-7 sm:h-8 sm:w-8 text-accent shrink-0" />
           <div>
-            <h1 className="text-3xl font-bold text-foreground">Configurações</h1>
-            <p className="text-muted-foreground">Personalize seu sistema e gerencie usuários</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Configurações</h1>
+            <p className="text-sm sm:text-base text-muted-foreground">Personalize seu sistema e gerencie usuários</p>
           </div>
         </div>
 
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-5 mb-8 bg-card border border-border">
-            <TabsTrigger value="general" className="text-foreground">Geral</TabsTrigger>
-            <TabsTrigger value="theme" className="text-foreground">Tema</TabsTrigger>
-            <TabsTrigger value="users" className="text-foreground">Usuários</TabsTrigger>
-            <TabsTrigger value="permissions" className="text-foreground">Permissões</TabsTrigger>
-            <TabsTrigger value="audit" className="text-foreground">Auditoria</TabsTrigger>
+          <TabsList className="flex w-full overflow-x-auto sm:grid sm:grid-cols-5 mb-6 sm:mb-8 bg-card border border-border">
+            <TabsTrigger value="general" className="text-foreground whitespace-nowrap">Geral</TabsTrigger>
+            <TabsTrigger value="theme" className="text-foreground whitespace-nowrap">Tema</TabsTrigger>
+            <TabsTrigger value="users" className="text-foreground whitespace-nowrap">Usuários</TabsTrigger>
+            <TabsTrigger value="permissions" className="text-foreground whitespace-nowrap">Permissões</TabsTrigger>
+            <TabsTrigger value="audit" className="text-foreground whitespace-nowrap">Auditoria</TabsTrigger>
           </TabsList>
 
           {/* TAB: GERAL */}
@@ -204,7 +204,7 @@ export default function SettingsPage() {
                 <CardDescription className="text-muted-foreground">Escolha as cores do seu sistema</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                   <div className="space-y-2">
                     <Label htmlFor="primary-color" className="text-foreground">
                       Cor Primária (Dourado)
@@ -258,14 +258,14 @@ export default function SettingsPage() {
 
                 <div className="p-4 rounded-lg border border-border bg-background">
                   <p className="text-sm text-muted-foreground mb-3">Visualização em tempo real:</p>
-                  <div className="flex gap-2">
-                    <button 
+                  <div className="flex flex-wrap gap-2">
+                    <button
                       className="px-4 py-2 rounded-lg text-white font-semibold transition-all"
                       style={{ backgroundColor: primaryColor }}
                     >
                       Botão Primário
                     </button>
-                    <button 
+                    <button
                       className="px-4 py-2 rounded-lg text-white font-semibold transition-all"
                       style={{ backgroundColor: secondaryColor }}
                     >
@@ -314,24 +314,37 @@ export default function SettingsPage() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-accent" />
                   </div>
                 ) : rolesQuery.data && rolesQuery.data.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-border">
-                          <TableHead className="text-accent font-bold">Role</TableHead>
-                          <TableHead className="text-accent font-bold">Descrição</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {rolesQuery.data.map((role: any) => (
-                          <TableRow key={role.id} className="border-border hover:bg-background/50">
-                            <TableCell className="font-medium text-foreground">{role.name}</TableCell>
-                            <TableCell className="text-muted-foreground">{role.description || "-"}</TableCell>
+                  <>
+                    {/* Cards no celular */}
+                    <div className="md:hidden space-y-2 sm:space-y-3">
+                      {rolesQuery.data.map((role: any) => (
+                        <div key={role.id} className="p-3 bg-background rounded-lg border border-border space-y-1.5">
+                          <p className="font-medium text-foreground">{role.name}</p>
+                          <p className="text-sm text-muted-foreground">{role.description || "-"}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Tabela no computador */}
+                    <div className="overflow-x-auto hidden md:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-border">
+                            <TableHead className="text-accent font-bold">Role</TableHead>
+                            <TableHead className="text-accent font-bold">Descrição</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        </TableHeader>
+                        <TableBody>
+                          {rolesQuery.data.map((role: any) => (
+                            <TableRow key={role.id} className="border-border hover:bg-background/50">
+                              <TableCell className="font-medium text-foreground">{role.name}</TableCell>
+                              <TableCell className="text-muted-foreground">{role.description || "-"}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     Nenhuma role configurada
@@ -354,32 +367,51 @@ export default function SettingsPage() {
                     <Loader2 className="h-6 w-6 animate-spin mx-auto text-accent" />
                   </div>
                 ) : auditLogQuery.data && auditLogQuery.data.length > 0 ? (
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow className="border-border">
-                          <TableHead className="text-accent font-bold">Ação</TableHead>
-                          <TableHead className="text-accent font-bold">Usuário</TableHead>
-                          <TableHead className="text-accent font-bold">Data</TableHead>
-                          <TableHead className="text-accent font-bold">Status</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {auditLogQuery.data.map((log: any) => (
-                          <TableRow key={log.id} className="border-border hover:bg-background/50">
-                            <TableCell className="font-medium text-foreground">{log.action}</TableCell>
-                            <TableCell className="text-muted-foreground">{log.userId}</TableCell>
-                            <TableCell className="text-muted-foreground">{new Date(log.timestamp).toLocaleString("pt-BR")}</TableCell>
-                            <TableCell>
-                              <Badge variant={log.status === "success" ? "default" : "destructive"}>
-                                {log.status}
-                              </Badge>
-                            </TableCell>
+                  <>
+                    {/* Cards no celular */}
+                    <div className="md:hidden space-y-2 sm:space-y-3">
+                      {auditLogQuery.data.map((log: any) => (
+                        <div key={log.id} className="p-3 bg-background rounded-lg border border-border space-y-1.5">
+                          <div className="flex items-start justify-between gap-2">
+                            <p className="font-medium text-foreground">{log.action}</p>
+                            <Badge variant={log.status === "success" ? "default" : "destructive"}>
+                              {log.status}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground">Usuário: {log.userId}</p>
+                          <p className="text-sm text-muted-foreground">{new Date(log.timestamp).toLocaleString("pt-BR")}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Tabela no computador */}
+                    <div className="overflow-x-auto hidden md:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="border-border">
+                            <TableHead className="text-accent font-bold">Ação</TableHead>
+                            <TableHead className="text-accent font-bold">Usuário</TableHead>
+                            <TableHead className="text-accent font-bold">Data</TableHead>
+                            <TableHead className="text-accent font-bold">Status</TableHead>
                           </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
+                        </TableHeader>
+                        <TableBody>
+                          {auditLogQuery.data.map((log: any) => (
+                            <TableRow key={log.id} className="border-border hover:bg-background/50">
+                              <TableCell className="font-medium text-foreground">{log.action}</TableCell>
+                              <TableCell className="text-muted-foreground">{log.userId}</TableCell>
+                              <TableCell className="text-muted-foreground">{new Date(log.timestamp).toLocaleString("pt-BR")}</TableCell>
+                              <TableCell>
+                                <Badge variant={log.status === "success" ? "default" : "destructive"}>
+                                  {log.status}
+                                </Badge>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
                     Nenhuma ação registrada

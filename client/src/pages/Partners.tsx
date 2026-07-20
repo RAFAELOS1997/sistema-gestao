@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Plus, Edit2, Power, Medal, Eye, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -250,6 +251,72 @@ export default function Partners() {
           ) : terreiros.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">Nenhum terreiro cadastrado ainda</div>
           ) : (
+            <>
+            {/* Lista em cards no celular */}
+            <div className="md:hidden space-y-2 sm:space-y-3">
+              {terreiros.map((t: any) => (
+                <div key={t.id} className="p-3 bg-background rounded-lg border border-border space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-foreground text-sm leading-snug">{t.name}</p>
+                    <Badge
+                      className={`shrink-0 text-[10px] ${t.isActive ? "bg-green-900/40 text-green-400 border-green-700" : "bg-red-900/40 text-red-400 border-red-700"}`}
+                    >
+                      {t.isActive ? "Ativo" : "Inativo"}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{t.username}</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {tierName(t.tierId) ? (
+                      <span className="px-2 py-1 rounded text-xs bg-accent/20 text-accent">{tierName(t.tierId)}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Sem plano</span>
+                    )}
+                    {openItemsOf(t.id) > 0 && (
+                      <span className="px-2 py-1 rounded text-xs bg-amber-900/30 text-amber-200">
+                        {openItemsOf(t.id)} item(ns) em comodato
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {(t.contactName || t.phone) && (
+                      <p>
+                        {t.contactName || "-"}
+                        {t.phone ? ` · ${t.phone}` : ""}
+                      </p>
+                    )}
+                    <p>
+                      Último acesso:{" "}
+                      {t.lastSignedIn
+                        ? new Date(t.lastSignedIn).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })
+                        : "Nunca entrou"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 pt-1 border-t border-border">
+                    <Link href={`/parceiros-terreiros/${t.id}`} className="flex-1">
+                      <Button variant="outline" size="sm" className="w-full h-9">
+                        <Eye className="w-3.5 h-3.5 mr-1" />
+                        Ver
+                      </Button>
+                    </Link>
+                    <Button variant="outline" size="sm" onClick={() => handleEdit(t)} className="h-9 w-9 p-0">
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleToggleActive(t)}
+                      disabled={setActiveMutation.isPending}
+                      className="h-9 w-9 p-0"
+                    >
+                      <Power className={`w-3.5 h-3.5 ${t.isActive ? "text-red-500" : "text-green-500"}`} />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabela no computador */}
+            <div className="overflow-x-auto hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -320,6 +387,8 @@ export default function Partners() {
                 ))}
               </TableBody>
             </Table>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

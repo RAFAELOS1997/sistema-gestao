@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -218,25 +219,27 @@ export default function PartnerTiers() {
               <CardDescription>Deixe o preço em branco e salve vazio pra esconder o produto desse plano</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="mb-4 p-3 rounded-lg border border-border bg-background/50 flex flex-wrap items-end gap-3">
+              <div className="mb-4 p-3 rounded-lg border border-border bg-background/50 flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-3">
                 <div>
                   <Label htmlFor="bulkDiscount" className="text-xs">Desconto sobre o preço de venda (%)</Label>
                   <Input
                     id="bulkDiscount"
                     type="number"
                     step="1"
-                    className="w-28 mt-1"
+                    className="w-full sm:w-28 mt-1 h-9"
                     value={bulkDiscount}
                     onChange={(e) => setBulkDiscount(e.target.value)}
                   />
                 </div>
-                <Button size="sm" onClick={() => handleBulkFill(false)} disabled={bulkFillMutation.isPending}>
-                  Preencher só os vazios
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => handleBulkFill(true)} disabled={bulkFillMutation.isPending}>
-                  Recalcular todos
-                </Button>
-                <p className="text-xs text-muted-foreground basis-full">
+                <div className="flex gap-2">
+                  <Button size="sm" onClick={() => handleBulkFill(false)} disabled={bulkFillMutation.isPending} className="flex-1 sm:flex-none h-9">
+                    Preencher só os vazios
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => handleBulkFill(true)} disabled={bulkFillMutation.isPending} className="flex-1 sm:flex-none h-9">
+                    Recalcular todos
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground sm:basis-full">
                   Preenche o plano inteiro de uma vez a partir do preço de venda da loja (0 = mesmo preço; 10 = 10% mais
                   barato; negativo = acréscimo). "Preencher só os vazios" mantém os preços que você já definiu à mão.
                 </p>
@@ -246,6 +249,58 @@ export default function PartnerTiers() {
               ) : priceRows.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">Nenhum produto ativo cadastrado</div>
               ) : (
+                <>
+                {/* Lista em cards no celular */}
+                <div className="md:hidden space-y-2 sm:space-y-3">
+                  {priceRows.map((row) => (
+                    <div key={row.productId} className="p-3 bg-background rounded-lg border border-border space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium text-foreground text-sm leading-snug">{row.name}</p>
+                        <Badge variant="outline" className="shrink-0 text-[10px] border-border text-muted-foreground">
+                          Estoque: {row.currentStock}
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground">{row.category}</p>
+                      <div>
+                        <Label htmlFor={`tier-price-${row.productId}`} className="text-xs">Preço nesse plano (R$)</Label>
+                        <Input
+                          id={`tier-price-${row.productId}`}
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          className="mt-1 h-9"
+                          placeholder="Escondido"
+                          value={priceDrafts[row.productId] ?? ""}
+                          onChange={(e) => setPriceDrafts({ ...priceDrafts, [row.productId]: e.target.value })}
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-1 border-t border-border">
+                        <Button
+                          size="sm"
+                          onClick={() => handleSavePrice(row.productId)}
+                          disabled={setPriceMutation.isPending}
+                          className="flex-1 h-9"
+                        >
+                          Salvar
+                        </Button>
+                        {row.price != null && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleHideProduct(row.productId)}
+                            disabled={removePriceMutation.isPending}
+                            className="flex-1 h-9"
+                          >
+                            Esconder
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tabela no computador */}
+                <div className="overflow-x-auto hidden md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -287,6 +342,8 @@ export default function PartnerTiers() {
                     ))}
                   </TableBody>
                 </Table>
+                </div>
+                </>
               )}
             </CardContent>
           </Card>

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Power } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -139,7 +140,7 @@ export default function PartnerDetail() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div>
             <CardTitle>Dados de acesso</CardTitle>
             <CardDescription>Login, plano e contato desse terreiro</CardDescription>
@@ -149,6 +150,7 @@ export default function PartnerDetail() {
             size="sm"
             onClick={() => setActiveMutation.mutate({ id: terreiroId, isActive: !terreiro.isActive })}
             disabled={setActiveMutation.isPending}
+            className="w-full sm:w-auto h-9"
           >
             <Power className={`w-4 h-4 mr-2 ${terreiro.isActive ? "text-red-500" : "text-green-500"}`} />
             {terreiro.isActive ? "Desativar acesso" : "Ativar acesso"}
@@ -222,6 +224,61 @@ export default function PartnerDetail() {
           ) : priceRows.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">Nenhum produto ativo cadastrado</div>
           ) : (
+            <>
+            {/* Lista em cards no celular */}
+            <div className="md:hidden space-y-2 sm:space-y-3">
+              {priceRows.map((row) => (
+                <div key={row.productId} className="p-3 bg-background rounded-lg border border-border space-y-1.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-medium text-foreground text-sm leading-snug">{row.name}</p>
+                    <Badge variant="outline" className="shrink-0 text-[10px] border-border text-muted-foreground">
+                      Estoque: {row.currentStock}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Preço do plano:{" "}
+                    {row.tierPrice != null ? `R$ ${(row.tierPrice / 100).toFixed(2)}` : "Sem preço no plano"}
+                  </p>
+                  <div>
+                    <Label htmlFor={`price-${row.productId}`} className="text-xs">Preço específico (R$)</Label>
+                    <Input
+                      id={`price-${row.productId}`}
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="mt-1 h-9"
+                      placeholder="Usa o do plano"
+                      value={priceDrafts[row.productId] ?? ""}
+                      onChange={(e) => setPriceDrafts({ ...priceDrafts, [row.productId]: e.target.value })}
+                    />
+                  </div>
+                  <div className="flex gap-2 pt-1 border-t border-border">
+                    <Button
+                      size="sm"
+                      onClick={() => handleSavePrice(row.productId)}
+                      disabled={setPriceMutation.isPending}
+                      className="flex-1 h-9"
+                    >
+                      Salvar
+                    </Button>
+                    {row.overridePrice != null && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => removePriceMutation.mutate({ terreiroId, productId: row.productId })}
+                        disabled={removePriceMutation.isPending}
+                        className="flex-1 h-9"
+                      >
+                        Usar do plano
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabela no computador */}
+            <div className="overflow-x-auto hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -270,6 +327,8 @@ export default function PartnerDetail() {
                 ))}
               </TableBody>
             </Table>
+            </div>
+            </>
           )}
         </CardContent>
       </Card>

@@ -149,7 +149,59 @@ export default function Suppliers() {
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Carregando fornecedores...</div>
           ) : filteredSuppliers.length > 0 ? (
-            <div className="overflow-x-auto">
+            <>
+            {/* Lista em cards no celular */}
+            <div className="md:hidden space-y-2 sm:space-y-3">
+              {filteredSuppliers.map((supplier) => (
+                <div key={supplier.id} className="p-3 bg-background rounded-lg border border-border space-y-1.5">
+                  <p className="font-medium text-foreground text-sm leading-snug">{supplier.name}</p>
+                  <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Email</p>
+                      <p className="text-muted-foreground truncate">{supplier.email || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Telefone</p>
+                      <p className="text-muted-foreground">{supplier.phone || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Cidade</p>
+                      <p className="text-muted-foreground">{supplier.city || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground">Pagamento</p>
+                      <p className="text-muted-foreground">{supplier.paymentTerms || "-"}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 pt-1 border-t border-border">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => openEdit(supplier)}
+                      className="flex-1 h-9 border-border text-accent hover:bg-background"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 mr-1" />
+                      Editar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setDeleteId(supplier.id);
+                        setDeleteDialogOpen(true);
+                      }}
+                      className="h-9 w-9 p-0 border-border text-destructive hover:bg-destructive/10"
+                      title="Excluir fornecedor"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabela no computador */}
+            <div className="overflow-x-auto hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
@@ -195,6 +247,7 @@ export default function Suppliers() {
                 </TableBody>
               </Table>
             </div>
+            </>
           ) : (
             <div className="text-center py-8 text-muted-foreground">Nenhum fornecedor encontrado</div>
           )}
@@ -203,7 +256,7 @@ export default function Suppliers() {
 
       {/* Dialog */}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent className="bg-card border-border max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-foreground">
               {editingId ? "Editar Fornecedor" : "Novo Fornecedor"}

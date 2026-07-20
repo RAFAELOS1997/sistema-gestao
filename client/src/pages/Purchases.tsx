@@ -508,7 +508,62 @@ export default function Purchases() {
             {purchaseItems.length > 0 && (
               <div>
                 <Label className="text-foreground">Itens da Compra ({purchaseItems.length})</Label>
-                <div className="mt-2 border border-border rounded-md overflow-hidden">
+
+                {/* Cards no celular */}
+                <div className="mt-2 md:hidden space-y-2 sm:space-y-3">
+                  {purchaseItems.map((item) => (
+                    <div key={item.id} className="p-3 bg-background rounded-lg border border-border space-y-1.5 sm:space-y-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="text-sm font-medium text-foreground leading-snug break-words">{item.productName}</p>
+                          {item.isNew && (
+                            <Badge className="bg-green-600/20 text-green-400 text-xs shrink-0">NOVO</Badge>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeItem(item.id)}
+                          className="h-9 w-9 shrink-0 text-red-400 hover:text-red-300 hover:bg-red-400/10"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <Label className="text-muted-foreground text-[10px]">Qtd</Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateItem(item.id, "quantity", parseInt(e.target.value) || 1)}
+                            className="bg-card border-border text-foreground h-9 mt-0.5"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-muted-foreground text-[10px]">Preço Unit. (R$)</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.unitPrice}
+                            onChange={(e) => updateItem(item.id, "unitPrice", e.target.value)}
+                            className="bg-card border-border text-foreground h-9 mt-0.5"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between text-sm pt-1 border-t border-border">
+                        <span className="text-muted-foreground text-xs">Subtotal</span>
+                        <span className="text-foreground font-medium">
+                          R$ {((parseFloat(item.unitPrice) || 0) * item.quantity).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tabela no computador */}
+                <div className="mt-2 border border-border rounded-md overflow-x-auto hidden md:block">
                   <Table>
                     <TableHeader>
                       <TableRow className="border-border hover:bg-transparent">
@@ -579,7 +634,7 @@ export default function Purchases() {
             )}
 
             {/* Botão Finalizar */}
-            <div className="flex justify-end gap-3 pt-4 border-t border-border">
+            <div className="flex flex-wrap justify-end gap-3 pt-4 border-t border-border">
               <Button variant="outline" onClick={() => setShowNewPurchase(false)} className="border-border text-foreground">
                 Cancelar
               </Button>
@@ -876,7 +931,36 @@ export default function Purchases() {
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="overflow-x-auto">
+                      {/* Cards no celular */}
+                      <div className="md:hidden space-y-2 sm:space-y-3">
+                        {importResult.items.map((item: any, idx: number) => (
+                          <div key={idx} className="p-3 bg-background rounded-lg border border-border space-y-1.5 sm:space-y-2">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="text-sm font-medium text-foreground leading-snug break-words">{item.productName}</p>
+                              {item.existingProductId ? (
+                                <Badge className="bg-blue-600/20 text-blue-400 text-xs shrink-0">Existente</Badge>
+                              ) : (
+                                <Badge className="bg-green-600/20 text-green-400 text-xs shrink-0">Novo</Badge>
+                              )}
+                            </div>
+                            <Badge variant="outline" className="border-accent/30 text-accent text-xs">
+                              {CATEGORY_LABELS[item.category] || item.category}
+                            </Badge>
+                            <div className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>{item.quantity}x R$ {(item.unitPriceCents / 100).toFixed(2)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-sm pt-1 border-t border-border">
+                              <span className="text-muted-foreground text-xs">Subtotal</span>
+                              <span className="text-accent font-medium">
+                                R$ {((item.unitPriceCents * item.quantity) / 100).toFixed(2)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Tabela no computador */}
+                      <div className="overflow-x-auto hidden md:block">
                         <Table>
                           <TableHeader>
                             <TableRow className="border-border">
@@ -928,7 +1012,7 @@ export default function Purchases() {
                   </Card>
 
                   {/* Ações */}
-                  <div className="flex justify-end gap-3">
+                  <div className="flex flex-wrap justify-end gap-3">
                     <Button
                       variant="outline"
                       onClick={() => {
@@ -976,7 +1060,40 @@ export default function Purchases() {
           {purchasesQuery.isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Carregando compras...</div>
           ) : purchasesQuery.data && purchasesQuery.data.length > 0 ? (
-            <div className="overflow-x-auto">
+            <>
+            {/* Cards no celular */}
+            <div className="md:hidden space-y-2 sm:space-y-3">
+              {purchasesQuery.data.map((purchase) => (
+                <div key={purchase.id} className="p-3 bg-background rounded-lg border border-border space-y-1.5 sm:space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-medium text-foreground leading-snug break-words">
+                      {getProductName(purchase.productId)}
+                    </p>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {new Date(purchase.purchaseDate).toLocaleDateString("pt-BR")}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{purchase.quantity}x R$ {(purchase.unitPrice / 100).toFixed(2)} · {purchase.supplier}</span>
+                  </div>
+                  <div className="flex items-center justify-between pt-1 border-t border-border">
+                    <span className="text-accent font-semibold">R$ {(purchase.totalPrice / 100).toFixed(2)}</span>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleEditPurchase(purchase)}
+                      className="h-9 border-accent/30 text-accent hover:bg-accent/10"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 mr-1" />
+                      Editar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Tabela no computador */}
+            <div className="overflow-x-auto hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
@@ -1019,6 +1136,7 @@ export default function Purchases() {
                 </TableBody>
               </Table>
             </div>
+            </>
           ) : (
             <div className="text-center py-8 text-muted-foreground">Nenhuma compra registrada ainda</div>
           )}
