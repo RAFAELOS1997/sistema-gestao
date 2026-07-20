@@ -29,7 +29,7 @@ const COLORS = ["#d4af37", "#c9a227", "#bf9517", "#b58707", "#aa7a07"];
 const CHANNEL_LABELS: Record<string, string> = {
   fisico: "Loja Física",
   instagram: "Instagram",
-  terreiro: "Terreiro",
+  terreiro: "Parceiro",
 };
 
 export default function SalesControl() {
@@ -160,7 +160,7 @@ export default function SalesControl() {
         `R$ ${(sale.unitPrice / 100).toFixed(2)}`,
         `R$ ${(sale.totalPrice / 100).toFixed(2)}`,
         `R$ ${(sale.profit / 100).toFixed(2)}`,
-        sale.channel === "fisico" ? "Físico" : sale.channel === "terreiro" ? "Terreiro" : "Instagram",
+        sale.channel === "fisico" ? "Físico" : sale.channel === "terreiro" ? "Parceiro" : "Instagram",
       ];
     });
 

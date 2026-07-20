@@ -55,7 +55,8 @@ export default function Sales() {
   const [discountMode, setDiscountMode] = React.useState<"percent" | "reais">("percent");
   const [paymentMethod, setPaymentMethod] = React.useState("dinheiro");
   const [receivedAmount, setReceivedAmount] = React.useState("");
-  const [channel, setChannel] = React.useState<"fisico" | "instagram">("fisico");
+  const [channel, setChannel] = React.useState<"fisico" | "instagram" | "terreiro">("fisico");
+  const [selectedTerreiroId, setSelectedTerreiroId] = React.useState<number | null>(null);
   const [notes, setNotes] = React.useState("");
   const [showReceipt, setShowReceipt] = React.useState(false);
   const [lastSaleData, setLastSaleData] = React.useState<{
@@ -71,6 +72,22 @@ export default function Sales() {
   const productsQuery = trpc.products.list.useQuery();
   const createSaleMutation = trpc.sales.create.useMutation();
   const createReceiptMutation = trpc.receipts.create.useMutation();
+  const terreirosQuery = trpc.terreiros.list.useQuery(undefined, { enabled: channel === "terreiro" });
+  const partnerTiersQuery = trpc.partnerTiers.list.useQuery(undefined, { enabled: channel === "terreiro" });
+
+  const selectedTerreiro = terreirosQuery.data?.find((t) => t.id === selectedTerreiroId) ?? null;
+  const selectedTerreiroTier = selectedTerreiro?.tierId
+    ? partnerTiersQuery.data?.find((t) => t.id === selectedTerreiro.tierId) ?? null
+    : null;
+
+  // Ao escolher o parceiro, preenche o desconto sozinho com o do plano dele
+  // (dá pra ajustar na mão depois, se precisar).
+  React.useEffect(() => {
+    if (channel === "terreiro" && selectedTerreiroTier) {
+      setDiscountMode("percent");
+      setDiscountValue(String(selectedTerreiroTier.discountPercent));
+    }
+  }, [selectedTerreiroId, selectedTerreiroTier?.discountPercent]);
 
   // Filtrar produtos
   const filteredProducts = React.useMemo(() => {
@@ -211,20 +228,33 @@ export default function Sales() {
       toast.error("Tem item com preço zerado no carrinho. Ajuste o preço antes de finalizar.");
       return;
     }
+    if (channel === "terreiro" && !selectedTerreiroId) {
+      toast.error("Selecione o parceiro pra finalizar a venda");
+      return;
+    }
 
     try {
+      const { subtotal, discount, total } = cartTotals;
+      // O desconto do carrinho (manual ou do plano do parceiro) só aparecia no
+      // recibo — a venda registrada (que alimenta Dashboard/Controle de
+      // Vendas) ia com o preço cheio, inflando receita e lucro. Aqui o
+      // desconto é distribuído proporcionalmente pra cada item, então o
+      // preço unitário registrado é o que realmente foi cobrado.
+      const discountRatio = subtotal > 0 ? discount / subtotal : 0;
+
       // Registrar cada item do carrinho como uma venda separada
       for (const item of cart) {
+        const effectiveUnitPrice = discountRatio > 0
+          ? Math.max(1, Math.round(item.unitPrice * (1 - discountRatio)))
+          : item.unitPrice;
         await createSaleMutation.mutateAsync({
           productId: item.productId,
           quantity: item.quantity,
-          unitPrice: item.unitPrice,
+          unitPrice: effectiveUnitPrice,
           channel,
           saleDate: new Date(),
         });
       }
-
-      const { subtotal, discount, total } = cartTotals;
 
       // Criar recibo no banco com numeração sequencial
       const receiptResult = await createReceiptMutation.mutateAsync({
@@ -258,6 +288,7 @@ export default function Sales() {
       setPaymentMethod("dinheiro");
       setReceivedAmount("");
       setChannel("fisico");
+      setSelectedTerreiroId(null);
       setNotes("");
       setShowReceipt(true);
       toast.success("Venda finalizada com sucesso!");
@@ -583,7 +614,7 @@ export default function Sales() {
                 {/* Canal da venda */}
                 <div className="pt-2 border-t border-border">
                   <Label className="text-foreground text-xs">Canal da Venda</Label>
-                  <div className="grid grid-cols-2 gap-2 mt-1">
+                  <div className="grid grid-cols-3 gap-2 mt-1">
                     <Button
                       type="button"
                       size="sm"
@@ -606,7 +637,56 @@ export default function Sales() {
                     >
                       Instagram
                     </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={channel === "terreiro" ? "default" : "outline"}
+                      className={channel === "terreiro"
+                        ? "bg-accent text-accent-foreground hover:bg-accent/90"
+                        : "border-border text-muted-foreground"}
+                      onClick={() => setChannel("terreiro")}
+                    >
+                      Parceiro
+                    </Button>
                   </div>
+
+                  {channel === "terreiro" && (
+                    <div className="mt-2">
+                      <Label htmlFor="terreiro-select" className="text-foreground text-xs">Qual parceiro?</Label>
+                      <Select
+                        value={selectedTerreiroId ? String(selectedTerreiroId) : ""}
+                        onValueChange={(v) => setSelectedTerreiroId(Number(v))}
+                      >
+                        <SelectTrigger id="terreiro-select" className="mt-1 bg-background border-border text-foreground text-sm h-10">
+                          <SelectValue placeholder={terreirosQuery.isLoading ? "Carregando..." : "Selecione o parceiro"} />
+                        </SelectTrigger>
+                        <SelectContent className="bg-card border-border">
+                          {(terreirosQuery.data ?? []).length === 0 && !terreirosQuery.isLoading ? (
+                            <div className="px-2 py-1.5 text-sm text-muted-foreground">Nenhum parceiro cadastrado</div>
+                          ) : (
+                            (terreirosQuery.data ?? []).map((t) => (
+                              <SelectItem key={t.id} value={String(t.id)} className="text-foreground">
+                                {t.name}
+                              </SelectItem>
+                            ))
+                          )}
+                        </SelectContent>
+                      </Select>
+                      {selectedTerreiro && (
+                        <p className="text-xs mt-1.5">
+                          {selectedTerreiroTier ? (
+                            <span className="text-accent font-medium">
+                              Plano {selectedTerreiroTier.name} — {selectedTerreiroTier.discountPercent}% de desconto aplicado
+                            </span>
+                          ) : (
+                            <span className="text-destructive">
+                              Esse parceiro não tem plano definido — nenhum desconto automático. Cadastre um plano pra ele em "Terreiros Parceiros".
+                            </span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Payment Method */}
@@ -700,7 +780,11 @@ export default function Sales() {
                 {/* Finalize Button */}
                 <Button
                   onClick={handleFinalizeSale}
-                  disabled={createSaleMutation.isPending || createReceiptMutation.isPending}
+                  disabled={
+                    createSaleMutation.isPending ||
+                    createReceiptMutation.isPending ||
+                    (channel === "terreiro" && !selectedTerreiroId)
+                  }
                   className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-bold text-base py-6"
                 >
                   {createSaleMutation.isPending || createReceiptMutation.isPending ? "Processando..." : "Finalizar Venda"}

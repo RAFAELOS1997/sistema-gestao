@@ -815,7 +815,7 @@ const salesRouter = router({
         productId: z.number().int().positive(),
         quantity: z.number().int().positive(),
         unitPrice: z.number().int().positive(),
-        channel: z.enum(["fisico", "instagram"]),
+        channel: z.enum(["fisico", "instagram", "terreiro"]),
         saleDate: z.date(),
       })
     )
