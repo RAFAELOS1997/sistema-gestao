@@ -26,6 +26,12 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const COLORS = ["#d4af37", "#c9a227", "#bf9517", "#b58707", "#aa7a07"];
 
+const CHANNEL_LABELS: Record<string, string> = {
+  fisico: "Loja Física",
+  instagram: "Instagram",
+  terreiro: "Terreiro",
+};
+
 export default function SalesControl() {
   const [startDate, setStartDate] = React.useState(() => {
     const date = new Date();
@@ -34,6 +40,7 @@ export default function SalesControl() {
   });
   const [endDate, setEndDate] = React.useState(new Date().toISOString().split("T")[0]);
   const [selectedCategory, setSelectedCategory] = React.useState<string>("todos");
+  const [selectedChannel, setSelectedChannel] = React.useState<string>("todos");
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const productsQuery = trpc.products.list.useQuery();
@@ -51,6 +58,9 @@ export default function SalesControl() {
       const dateMatch = saleDate >= start && saleDate <= end;
       if (!dateMatch) return false;
 
+      // Filtro de canal
+      if (selectedChannel !== "todos" && sale.channel !== selectedChannel) return false;
+
       // Filtro de categoria
       if (selectedCategory !== "todos") {
         const product = productsQuery.data?.find((p) => p.id === sale.productId);
@@ -59,7 +69,7 @@ export default function SalesControl() {
 
       return true;
     });
-  }, [salesQuery.data, startDate, endDate, selectedCategory, productsQuery.data]);
+  }, [salesQuery.data, startDate, endDate, selectedCategory, selectedChannel, productsQuery.data]);
 
   // Calcular totais
   const totals = React.useMemo(() => {
@@ -203,7 +213,7 @@ export default function SalesControl() {
           <CardTitle className="text-foreground">Filtros</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div>
               <Label htmlFor="startDate" className="text-foreground text-sm">
                 Data Inicial
@@ -248,7 +258,27 @@ export default function SalesControl() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-end">
+            <div>
+              <Label htmlFor="channel" className="text-foreground text-sm">
+                Canal
+              </Label>
+              <Select value={selectedChannel} onValueChange={setSelectedChannel}>
+                <SelectTrigger id="channel" className="mt-1 bg-background border-border text-foreground">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="todos" className="text-foreground">
+                    Todos
+                  </SelectItem>
+                  {Object.entries(CHANNEL_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value} className="text-foreground">
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-end col-span-2 md:col-span-1">
               <Button onClick={handleExportCSV} variant="outline" className="w-full border-accent text-accent hover:bg-accent/10">
                 <Download className="w-4 h-4 mr-2" />
                 Exportar CSV
@@ -427,12 +457,42 @@ export default function SalesControl() {
         </CardHeader>
         <CardContent>
           {filteredSales.length > 0 ? (
-            <div className="overflow-x-auto">
+            <>
+            {/* Cards no celular */}
+            <div className="md:hidden space-y-2">
+              {filteredSales.map((sale, index) => {
+                const product = productsQuery.data?.find((p) => p.id === sale.productId);
+                const margin = sale.totalPrice > 0 ? Math.round((sale.profit / sale.totalPrice) * 100) : 0;
+                return (
+                  <div key={index} className="p-3 bg-background rounded-lg border border-border space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground leading-snug">
+                        {product?.name || `Produto #${sale.productId}`}
+                      </p>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {new Date(sale.saleDate).toLocaleDateString("pt-BR")}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{sale.quantity}x R$ {(sale.unitPrice / 100).toFixed(2)} · {CHANNEL_LABELS[sale.channel] ?? sale.channel}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-foreground font-semibold">R$ {(sale.totalPrice / 100).toFixed(2)}</span>
+                      <span className="text-accent font-bold">Lucro R$ {(sale.profit / 100).toFixed(2)} ({margin}%)</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Tabela no computador */}
+            <div className="overflow-x-auto hidden md:block">
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-transparent">
                     <TableHead className="text-accent">Data</TableHead>
                     <TableHead className="text-accent">Produto</TableHead>
+                    <TableHead className="text-accent">Canal</TableHead>
                     <TableHead className="text-accent text-right">Qtd</TableHead>
                     <TableHead className="text-accent text-right">Preço Unit.</TableHead>
                     <TableHead className="text-accent text-right">Total</TableHead>
@@ -450,6 +510,7 @@ export default function SalesControl() {
                           {new Date(sale.saleDate).toLocaleDateString("pt-BR")}
                         </TableCell>
                         <TableCell className="text-foreground">{product?.name || `Produto #${sale.productId}`}</TableCell>
+                        <TableCell className="text-muted-foreground text-sm">{CHANNEL_LABELS[sale.channel] ?? sale.channel}</TableCell>
                         <TableCell className="text-right text-muted-foreground">{sale.quantity}</TableCell>
                         <TableCell className="text-right text-muted-foreground">R$ {(sale.unitPrice / 100).toFixed(2)}</TableCell>
                         <TableCell className="text-right text-foreground">R$ {(sale.totalPrice / 100).toFixed(2)}</TableCell>
@@ -461,6 +522,7 @@ export default function SalesControl() {
                 </TableBody>
               </Table>
             </div>
+            </>
           ) : (
             <div className="text-center py-8 text-muted-foreground">Nenhuma venda no período selecionado</div>
           )}

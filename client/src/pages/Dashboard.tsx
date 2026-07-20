@@ -32,7 +32,14 @@ export default function Dashboard() {
   });
   const [endDate] = useState(() => new Date());
 
+  const [todayStart] = useState(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  });
+
   const { data: dashboardData, isLoading } = trpc.analytics.dashboard.useQuery({ startDate, endDate });
+  const { data: todayData } = trpc.analytics.dashboard.useQuery({ startDate: todayStart, endDate });
   const { data: categoryData } = trpc.analytics.byCategory.useQuery({ startDate, endDate });
   const { data: products } = trpc.products.list.useQuery();
 
@@ -71,6 +78,31 @@ export default function Dashboard() {
           {monthStart.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
         </Badge>
       </div>
+
+      {/* Hoje */}
+      <Card className="bg-card border-accent/30">
+        <CardContent className="p-4">
+          <p className="text-xs font-semibold text-accent uppercase tracking-wide mb-2">Hoje</p>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground">Vendas</p>
+              <p className="text-xl sm:text-2xl font-bold text-foreground">{todayData?.salesCount ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Receita</p>
+              <p className="text-xl sm:text-2xl font-bold text-foreground">
+                R$ {(((todayData?.totalRevenue as number) ?? 0) / 100).toFixed(2)}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Lucro</p>
+              <p className="text-xl sm:text-2xl font-bold text-accent">
+                R$ {(((todayData?.totalProfit as number) ?? 0) / 100).toFixed(2)}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
