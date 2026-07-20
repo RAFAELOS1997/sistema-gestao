@@ -8,12 +8,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   ShoppingCart, X, Plus, Minus, Search, EyeOff, Eye, AlertTriangle,
   ChevronDown, ChevronUp, ChevronLeft, ChevronRight, LayoutGrid, List as ListIcon,
+  QrCode, ExternalLink, CheckCircle2, Loader2,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { ReceiptModal } from "@/components/ReceiptModal";
 import { ZoomableImage } from "@/components/ZoomableImage";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { QRCodeSVG } from "qrcode.react";
 
 interface CartItem {
   productId: number;
@@ -68,12 +71,20 @@ export default function Sales() {
     notes: string;
     receiptNumber: number;
   } | null>(null);
+  const [infinitePayCharge, setInfinitePayCharge] = React.useState<{ orderNsu: string; checkoutUrl: string } | null>(null);
 
   const productsQuery = trpc.products.list.useQuery();
   const createSaleMutation = trpc.sales.create.useMutation();
   const createReceiptMutation = trpc.receipts.create.useMutation();
   const terreirosQuery = trpc.terreiros.list.useQuery(undefined, { enabled: channel === "terreiro" });
   const partnerTiersQuery = trpc.partnerTiers.list.useQuery(undefined, { enabled: channel === "terreiro" });
+  const infinitePayHandleQuery = trpc.infinitePay.getHandle.useQuery();
+  const infinitePayHandle = infinitePayHandleQuery.data?.handle ?? null;
+  const createChargeMutation = trpc.infinitePay.createCharge.useMutation();
+  const chargeStatusQuery = trpc.infinitePay.checkChargeStatus.useQuery(
+    { orderNsu: infinitePayCharge?.orderNsu ?? "" },
+    { enabled: !!infinitePayCharge, refetchInterval: 4000 }
+  );
 
   const selectedTerreiro = terreirosQuery.data?.find((t) => t.id === selectedTerreiroId) ?? null;
   const selectedTerreiroTier = selectedTerreiro?.tierId
@@ -218,84 +229,120 @@ export default function Sales() {
     setCart((prev) => prev.filter((item) => item.productId !== productId));
   };
 
-  // Finalizar venda
-  const handleFinalizeSale = async () => {
+  const validateCartForCheckout = () => {
     if (cart.length === 0) {
       toast.error("Carrinho vazio");
-      return;
+      return false;
     }
     if (cart.some((item) => item.unitPrice <= 0)) {
       toast.error("Tem item com preço zerado no carrinho. Ajuste o preço antes de finalizar.");
-      return;
+      return false;
     }
     if (channel === "terreiro" && !selectedTerreiroId) {
       toast.error("Selecione o parceiro pra finalizar a venda");
-      return;
+      return false;
+    }
+    return true;
+  };
+
+  // Grava as vendas + recibo (usado tanto no fluxo normal quanto depois que
+  // uma cobrança InfinitePay é confirmada como paga).
+  const finalizeSaleRecords = async () => {
+    const { subtotal, discount, total } = cartTotals;
+    // O desconto do carrinho (manual ou do plano do parceiro) só aparecia no
+    // recibo — a venda registrada (que alimenta Dashboard/Controle de
+    // Vendas) ia com o preço cheio, inflando receita e lucro. Aqui o
+    // desconto é distribuído proporcionalmente pra cada item, então o
+    // preço unitário registrado é o que realmente foi cobrado.
+    const discountRatio = subtotal > 0 ? discount / subtotal : 0;
+
+    // Registrar cada item do carrinho como uma venda separada
+    for (const item of cart) {
+      const effectiveUnitPrice = discountRatio > 0
+        ? Math.max(1, Math.round(item.unitPrice * (1 - discountRatio)))
+        : item.unitPrice;
+      await createSaleMutation.mutateAsync({
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: effectiveUnitPrice,
+        channel,
+        saleDate: new Date(),
+      });
     }
 
+    // Criar recibo no banco com numeração sequencial
+    const receiptResult = await createReceiptMutation.mutateAsync({
+      subtotal,
+      discount,
+      total,
+      paymentMethod,
+      notes: notes || undefined,
+      items: JSON.stringify(cart.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        total: item.total,
+      }))),
+    });
+
+    setLastSaleData({
+      items: cart,
+      subtotal,
+      discount,
+      total,
+      paymentMethod,
+      notes,
+      receiptNumber: receiptResult.receiptNumber,
+    });
+
+    setCart([]);
+    setCartExpanded(false);
+    setDiscountValue("0");
+    setDiscountMode("percent");
+    setPaymentMethod("dinheiro");
+    setReceivedAmount("");
+    setChannel("fisico");
+    setSelectedTerreiroId(null);
+    setNotes("");
+    setInfinitePayCharge(null);
+    setShowReceipt(true);
+  };
+
+  // Finalizar venda (pagamento já resolvido: dinheiro, pix manual, cartão, etc.)
+  const handleFinalizeSale = async () => {
+    if (!validateCartForCheckout()) return;
     try {
-      const { subtotal, discount, total } = cartTotals;
-      // O desconto do carrinho (manual ou do plano do parceiro) só aparecia no
-      // recibo — a venda registrada (que alimenta Dashboard/Controle de
-      // Vendas) ia com o preço cheio, inflando receita e lucro. Aqui o
-      // desconto é distribuído proporcionalmente pra cada item, então o
-      // preço unitário registrado é o que realmente foi cobrado.
-      const discountRatio = subtotal > 0 ? discount / subtotal : 0;
-
-      // Registrar cada item do carrinho como uma venda separada
-      for (const item of cart) {
-        const effectiveUnitPrice = discountRatio > 0
-          ? Math.max(1, Math.round(item.unitPrice * (1 - discountRatio)))
-          : item.unitPrice;
-        await createSaleMutation.mutateAsync({
-          productId: item.productId,
-          quantity: item.quantity,
-          unitPrice: effectiveUnitPrice,
-          channel,
-          saleDate: new Date(),
-        });
-      }
-
-      // Criar recibo no banco com numeração sequencial
-      const receiptResult = await createReceiptMutation.mutateAsync({
-        subtotal,
-        discount,
-        total,
-        paymentMethod,
-        notes: notes || undefined,
-        items: JSON.stringify(cart.map((item) => ({
-          name: item.name,
-          quantity: item.quantity,
-          unitPrice: item.unitPrice,
-          total: item.total,
-        }))),
-      });
-
-      setLastSaleData({
-        items: cart,
-        subtotal,
-        discount,
-        total,
-        paymentMethod,
-        notes,
-        receiptNumber: receiptResult.receiptNumber,
-      });
-
-      setCart([]);
-      setCartExpanded(false);
-      setDiscountValue("0");
-      setDiscountMode("percent");
-      setPaymentMethod("dinheiro");
-      setReceivedAmount("");
-      setChannel("fisico");
-      setSelectedTerreiroId(null);
-      setNotes("");
-      setShowReceipt(true);
+      await finalizeSaleRecords();
       toast.success("Venda finalizada com sucesso!");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Erro ao finalizar venda");
     }
   };
+
+  // Gera a cobrança na InfinitePay e abre o QR Code — a venda só é gravada
+  // quando o pagamento é confirmado (ver useEffect abaixo).
+  const handleChargeWithInfinitePay = async () => {
+    if (!validateCartForCheckout()) return;
+    try {
+      const result = await createChargeMutation.mutateAsync({
+        amountCents: cartTotals.total,
+        description: `Venda Toca da Pantera — ${cart.length} item(ns)`,
+      });
+      setInfinitePayCharge({ orderNsu: result.orderNsu, checkoutUrl: result.checkoutUrl });
+    } catch (error: any) {
+      toast.error(error?.message ?? "Erro ao gerar cobrança InfinitePay");
+    }
+  };
+
+  // Assim que o polling detecta o pagamento, grava a venda automaticamente.
+  React.useEffect(() => {
+    if (chargeStatusQuery.data?.status === "paid" && infinitePayCharge) {
+      finalizeSaleRecords()
+        .then(() => toast.success("Pagamento confirmado — venda finalizada!"))
+        .catch((error) => toast.error(error instanceof Error ? error.message : "Erro ao gravar a venda"));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chargeStatusQuery.data?.status]);
 
   return (
     <div className="space-y-6">
@@ -714,6 +761,9 @@ export default function Sales() {
                       <SelectItem value="cheque" className="text-foreground">
                         Cheque
                       </SelectItem>
+                      <SelectItem value="infinitepay" className="text-foreground" disabled={!infinitePayHandle}>
+                        InfinitePay (Pix/Cartão) {!infinitePayHandle && "— configure em Configurações"}
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -779,21 +829,91 @@ export default function Sales() {
 
                 {/* Finalize Button */}
                 <Button
-                  onClick={handleFinalizeSale}
+                  onClick={paymentMethod === "infinitepay" ? handleChargeWithInfinitePay : handleFinalizeSale}
                   disabled={
                     createSaleMutation.isPending ||
                     createReceiptMutation.isPending ||
+                    createChargeMutation.isPending ||
                     (channel === "terreiro" && !selectedTerreiroId)
                   }
                   className="w-full bg-accent text-accent-foreground hover:bg-accent/90 font-bold text-base py-6"
                 >
-                  {createSaleMutation.isPending || createReceiptMutation.isPending ? "Processando..." : "Finalizar Venda"}
+                  {createSaleMutation.isPending || createReceiptMutation.isPending
+                    ? "Processando..."
+                    : createChargeMutation.isPending
+                      ? "Gerando cobrança..."
+                      : paymentMethod === "infinitepay"
+                        ? "Gerar Cobrança InfinitePay"
+                        : "Finalizar Venda"}
                 </Button>
               </CardContent>
             )}
           </Card>
         </div>
       )}
+
+      {/* Cobrança InfinitePay: QR Code + aguardando pagamento */}
+      <Dialog open={!!infinitePayCharge} onOpenChange={(open) => { if (!open) setInfinitePayCharge(null); }}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <QrCode className="w-5 h-5 text-accent" />
+              Cobrança InfinitePay
+            </DialogTitle>
+            <DialogDescription>
+              R$ {(cartTotals.total / 100).toFixed(2)} — peça pro cliente escanear o QR Code com a câmera do celular
+            </DialogDescription>
+          </DialogHeader>
+
+          {infinitePayCharge && (
+            <div className="flex flex-col items-center gap-4 py-2">
+              {chargeStatusQuery.data?.status === "paid" ? (
+                <div className="flex flex-col items-center gap-2 py-8">
+                  <CheckCircle2 className="w-16 h-16 text-green-500" />
+                  <p className="text-foreground font-semibold">Pagamento confirmado!</p>
+                  <p className="text-sm text-muted-foreground">Gravando a venda...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-white p-3 rounded-lg">
+                    <QRCodeSVG value={infinitePayCharge.checkoutUrl} size={224} />
+                  </div>
+                  <a
+                    href={infinitePayCharge.checkoutUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-accent hover:underline flex items-center gap-1"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Abrir link do pagamento
+                  </a>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Aguardando pagamento...
+                  </div>
+                  <div className="flex gap-2 w-full">
+                    <Button
+                      variant="outline"
+                      className="flex-1 border-border"
+                      onClick={() => chargeStatusQuery.refetch()}
+                      disabled={chargeStatusQuery.isFetching}
+                    >
+                      {chargeStatusQuery.isFetching ? "Verificando..." : "Já paguei — verificar"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="border-destructive/40 text-destructive"
+                      onClick={() => setInfinitePayCharge(null)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Receipt Modal */}
       {lastSaleData && (

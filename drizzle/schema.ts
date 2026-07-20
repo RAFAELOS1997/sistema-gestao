@@ -113,12 +113,36 @@ export const systemConfig = mysqlTable("systemConfig", {
   primaryColor: varchar("primaryColor", { length: 7 }).default("#d4af37"), // Dourado
   secondaryColor: varchar("secondaryColor", { length: 7 }).default("#000000"), // Preto
   logoUrl: text("logoUrl"),
+  // InfiniteTag (identificador público, sem o "$") usada pra gerar cobranças
+  // via API da InfinitePay — não é uma chave secreta.
+  infinitePayHandle: varchar("infinitePayHandle", { length: 100 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
 
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type InsertSystemConfig = typeof systemConfig.$inferInsert;
+
+// Cobranças geradas via InfinitePay (Checkout Integrado) — cada venda paga
+// por lá vira uma linha aqui, pra acompanhar o status até o pagamento cair.
+export const infinitePayCharges = mysqlTable("infinitePayCharges", {
+  id: int("id").autoincrement().primaryKey(),
+  orderNsu: varchar("orderNsu", { length: 64 }).notNull().unique(),
+  amountCents: int("amountCents").notNull(),
+  description: varchar("description", { length: 255 }),
+  checkoutUrl: text("checkoutUrl").notNull(),
+  status: mysqlEnum("status", ["pending", "paid", "failed"]).default("pending").notNull(),
+  invoiceSlug: varchar("invoiceSlug", { length: 100 }),
+  transactionNsu: varchar("transactionNsu", { length: 100 }),
+  paidAmountCents: int("paidAmountCents"),
+  captureMethod: varchar("captureMethod", { length: 32 }),
+  receiptUrl: text("receiptUrl"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type InfinitePayCharge = typeof infinitePayCharges.$inferSelect;
+export type InsertInfinitePayCharge = typeof infinitePayCharges.$inferInsert;
 
 // ─── Roles and Permissions ─────────────────────────────────────────────────────
 

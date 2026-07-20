@@ -165,6 +165,8 @@ export default function Receipts() {
       pix: "PIX",
       debito: "Débito",
       credito: "Crédito",
+      cheque: "Cheque",
+      infinitepay: "InfinitePay",
     };
     return labels[method] || method;
   };

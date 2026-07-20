@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Settings as SettingsIcon } from "lucide-react";
+import { CreditCard, Loader2, Settings as SettingsIcon } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -18,11 +18,28 @@ export default function SettingsPage() {
   const [timezone, setTimezone] = useState("America/Sao_Paulo");
   const [logoUrl, setLogoUrl] = useState("/logo.jpeg");
   const [isSaving, setIsSaving] = useState(false);
+  const [infinitePayHandle, setInfinitePayHandle] = useState("");
 
   const configQuery = trpc.settings.getConfig.useQuery();
   const updateConfigMutation = trpc.settings.updateConfig.useMutation();
   const rolesQuery = trpc.settings.listRoles.useQuery();
   const auditLogQuery = trpc.settings.listAuditLog.useQuery({ limit: 50 });
+  const infinitePayHandleQuery = trpc.infinitePay.getHandle.useQuery();
+  const setInfinitePayHandleMutation = trpc.infinitePay.setHandle.useMutation();
+
+  useEffect(() => {
+    if (infinitePayHandleQuery.data) setInfinitePayHandle(infinitePayHandleQuery.data.handle ?? "");
+  }, [infinitePayHandleQuery.data]);
+
+  const handleSaveInfinitePayHandle = async () => {
+    try {
+      await setInfinitePayHandleMutation.mutateAsync({ handle: infinitePayHandle.trim() || null });
+      toast.success("InfiniteTag salva!");
+      infinitePayHandleQuery.refetch();
+    } catch (error: any) {
+      toast.error(error?.message ?? "Erro ao salvar");
+    }
+  };
 
   // Carregar configurações ao iniciar
   useEffect(() => {
@@ -105,9 +122,10 @@ export default function SettingsPage() {
         </div>
 
         <Tabs defaultValue="general" className="w-full">
-          <TabsList className="flex w-full overflow-x-auto sm:grid sm:grid-cols-5 mb-6 sm:mb-8 bg-card border border-border">
+          <TabsList className="flex w-full overflow-x-auto sm:grid sm:grid-cols-6 mb-6 sm:mb-8 bg-card border border-border">
             <TabsTrigger value="general" className="text-foreground whitespace-nowrap">Geral</TabsTrigger>
             <TabsTrigger value="theme" className="text-foreground whitespace-nowrap">Tema</TabsTrigger>
+            <TabsTrigger value="payments" className="text-foreground whitespace-nowrap">Pagamentos</TabsTrigger>
             <TabsTrigger value="users" className="text-foreground whitespace-nowrap">Usuários</TabsTrigger>
             <TabsTrigger value="permissions" className="text-foreground whitespace-nowrap">Permissões</TabsTrigger>
             <TabsTrigger value="audit" className="text-foreground whitespace-nowrap">Auditoria</TabsTrigger>
@@ -281,6 +299,50 @@ export default function SettingsPage() {
                 >
                   {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                   Salvar Tema
+                </Button>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* TAB: PAGAMENTOS */}
+          <TabsContent value="payments">
+            <Card className="border-border bg-card">
+              <CardHeader>
+                <CardTitle className="text-foreground flex items-center gap-2">
+                  <CreditCard className="h-5 w-5 text-accent" />
+                  InfinitePay
+                </CardTitle>
+                <CardDescription className="text-muted-foreground">
+                  Configure sua InfiniteTag pra poder cobrar por Pix/cartão direto na tela de Vendas
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="infinitepay-handle" className="text-foreground">
+                    InfiniteTag
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground select-none">$</span>
+                    <Input
+                      id="infinitepay-handle"
+                      value={infinitePayHandle}
+                      onChange={(e) => setInfinitePayHandle(e.target.value.replace(/^\$/, ""))}
+                      className="bg-background border-border text-foreground pl-7"
+                      placeholder="toca-da-pantera"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    É o seu @ que aparece no canto superior esquerdo do app InfinitePay — não é senha nem chave secreta,
+                    é só o identificador público da sua conta usado pra gerar as cobranças.
+                  </p>
+                </div>
+                <Button
+                  onClick={handleSaveInfinitePayHandle}
+                  disabled={setInfinitePayHandleMutation.isPending}
+                  className="bg-accent text-accent-foreground hover:bg-accent/90 w-full sm:w-auto"
+                >
+                  {setInfinitePayHandleMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Salvar InfiniteTag
                 </Button>
               </CardContent>
             </Card>

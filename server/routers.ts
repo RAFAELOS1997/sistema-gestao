@@ -1,6 +1,8 @@
 import { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
 import { TRPCError } from "@trpc/server";
+import { randomUUID } from "crypto";
 import { z } from "zod";
+import { createPaymentLink, checkPayment } from "./_core/infinitePay";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { invokeLLM } from "./_core/llm";
 import { hashPassword, verifyPassword } from "./_core/password";
@@ -79,6 +81,9 @@ import {
   createConsignment,
   markConsignmentSold,
   markConsignmentReturned,
+  createInfinitePayCharge,
+  getInfinitePayChargeByOrderNsu,
+  markInfinitePayChargePaid,
 } from "./db";
 
 // O hash de senha (scrypt) nunca deve sair do servidor — sem isso, auth.me e
@@ -853,6 +858,89 @@ const analyticsRouter = router({
 });
 
 // ─── Settings Router ────────────────────────────────────────────────────────────
+
+// ─── InfinitePay (Checkout Integrado) ──────────────────────────────────────────
+// Autenticação da API é só a InfiniteTag (handle público, sem "$") — não é
+// uma chave secreta. Ainda assim nunca é exposta pro portal do parceiro nem
+// pra rotas públicas; só protectedProcedure (staff logado) mexe nela.
+const PUBLIC_BASE_URL = process.env.PUBLIC_BASE_URL || "https://sistema.tocadapantera.com.br";
+
+const infinitePayRouter = router({
+  getHandle: protectedProcedure.query(async () => {
+    const config = await getSystemConfig();
+    return { handle: config?.infinitePayHandle ?? null };
+  }),
+
+  setHandle: protectedProcedure
+    .input(z.object({ handle: z.string().trim().max(100).nullable() }))
+    .mutation(async ({ input, ctx }) => {
+      const cleanHandle = input.handle ? input.handle.replace(/^\$/, "").trim() || null : null;
+      await updateSystemConfig({ infinitePayHandle: cleanHandle });
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "infinitepay_handle_updated",
+        module: "settings",
+        description: "InfiniteTag da InfinitePay atualizada",
+      });
+      return { success: true };
+    }),
+
+  createCharge: protectedProcedure
+    .input(z.object({ amountCents: z.number().int().positive(), description: z.string().max(255).optional() }))
+    .mutation(async ({ input }) => {
+      const config = await getSystemConfig();
+      const handle = config?.infinitePayHandle;
+      if (!handle) {
+        throw new TRPCError({
+          code: "PRECONDITION_FAILED",
+          message: "Configure sua InfiniteTag em Configurações antes de cobrar com InfinitePay",
+        });
+      }
+
+      const orderNsu = randomUUID();
+      const { url } = await createPaymentLink({
+        handle,
+        orderNsu,
+        items: [{ quantity: 1, price: input.amountCents, description: input.description || "Venda Toca da Pantera" }],
+        webhookUrl: `${PUBLIC_BASE_URL}/api/webhooks/infinitepay`,
+      });
+      await createInfinitePayCharge({
+        orderNsu,
+        amountCents: input.amountCents,
+        description: input.description ?? null,
+        checkoutUrl: url,
+      });
+      return { orderNsu, checkoutUrl: url };
+    }),
+
+  // Confere o status de uma cobrança — sempre reconfere direto na InfinitePay
+  // se ainda estiver pendente localmente, pra cobrir o caso do webhook não
+  // ter chegado (não existe assinatura na API, então o webhook nunca é a
+  // única fonte de verdade).
+  checkChargeStatus: protectedProcedure
+    .input(z.object({ orderNsu: z.string().min(1) }))
+    .query(async ({ input }) => {
+      const charge = await getInfinitePayChargeByOrderNsu(input.orderNsu);
+      if (!charge) throw new TRPCError({ code: "NOT_FOUND", message: "Cobrança não encontrada" });
+      if (charge.status === "paid") {
+        return { status: "paid" as const, paidAmountCents: charge.paidAmountCents, captureMethod: charge.captureMethod };
+      }
+
+      const config = await getSystemConfig();
+      const handle = config?.infinitePayHandle;
+      if (handle) {
+        const result = await checkPayment({ handle, orderNsu: input.orderNsu });
+        if (result.paid) {
+          await markInfinitePayChargePaid(input.orderNsu, {
+            paidAmountCents: result.paidAmount,
+            captureMethod: result.captureMethod,
+          });
+          return { status: "paid" as const, paidAmountCents: result.paidAmount ?? null, captureMethod: result.captureMethod ?? null };
+        }
+      }
+      return { status: "pending" as const, paidAmountCents: null, captureMethod: null };
+    }),
+});
 
 const settingsRouter = router({
   getConfig: protectedProcedure.query(async () => {
@@ -1633,6 +1721,7 @@ export const appRouter = router({
   terreiros: terreirosRouter,
   portal: portalRouter,
   partnerTiers: partnerTiersRouter,
+  infinitePay: infinitePayRouter,
 });
 
 export type AppRouter = typeof appRouter;

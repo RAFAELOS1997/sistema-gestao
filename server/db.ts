@@ -9,6 +9,7 @@ import {
   partnerTiers,
   terreiroProductPrices,
   consignments,
+  infinitePayCharges, InsertInfinitePayCharge,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -256,6 +257,36 @@ export async function runStartupMigrations() {
     await seedPartnerTiers();
   } catch (error: any) {
     console.error("[migrations] seedPartnerTiers:", error);
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE systemConfig ADD COLUMN infinitePayHandle varchar(100)`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] systemConfig.infinitePayHandle:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS infinitePayCharges (
+        id int AUTO_INCREMENT NOT NULL,
+        orderNsu varchar(64) NOT NULL,
+        amountCents int NOT NULL,
+        description varchar(255),
+        checkoutUrl text NOT NULL,
+        status enum('pending','paid','failed') NOT NULL DEFAULT 'pending',
+        invoiceSlug varchar(100),
+        transactionNsu varchar(100),
+        paidAmountCents int,
+        captureMethod varchar(32),
+        receiptUrl text,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY infinitePayCharges_orderNsu_unique (orderNsu)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] infinitePayCharges:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -1098,4 +1129,28 @@ export async function markConsignmentReturned(id: number, quantity: number) {
     .update(products)
     .set({ currentStock: sql`${products.currentStock} + ${quantity}` })
     .where(eq(products.id, consignment.productId));
+}
+
+// ─── Cobranças InfinitePay ─────────────────────────────────────────────────────
+
+export async function createInfinitePayCharge(data: Omit<InsertInfinitePayCharge, "id" | "createdAt" | "updatedAt" | "status">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(infinitePayCharges).values({ ...data, status: "pending" });
+}
+
+export async function getInfinitePayChargeByOrderNsu(orderNsu: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(infinitePayCharges).where(eq(infinitePayCharges.orderNsu, orderNsu)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function markInfinitePayChargePaid(
+  orderNsu: string,
+  data: { transactionNsu?: string; invoiceSlug?: string; paidAmountCents?: number; captureMethod?: string; receiptUrl?: string }
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(infinitePayCharges).set({ status: "paid", ...data }).where(eq(infinitePayCharges.orderNsu, orderNsu));
 }
