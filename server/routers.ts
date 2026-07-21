@@ -26,6 +26,7 @@ import {
   getProductById,
   listProducts,
   listSales,
+  getTerreiroSpendingTotals,
   listPurchases,
   updateProduct,
   getSystemConfig,
@@ -823,6 +824,7 @@ const salesRouter = router({
         quantity: z.number().int().positive(),
         unitPrice: z.number().int().positive(),
         channel: z.enum(["fisico", "instagram", "terreiro"]),
+        terreiroId: z.number().int().positive().optional(),
         saleDate: z.date(),
       })
     )
@@ -831,6 +833,9 @@ const salesRouter = router({
       if (!product) throw new Error("Produto não encontrado");
       if (product.currentStock < input.quantity) {
         throw new Error(`Estoque insuficiente. Disponível: ${product.currentStock}`);
+      }
+      if (input.channel === "terreiro" && !input.terreiroId) {
+        throw new Error("Selecione o parceiro pra registrar essa venda");
       }
       const totalPrice = input.unitPrice * input.quantity;
       const profit = (input.unitPrice - product.costPrice) * input.quantity;
@@ -841,6 +846,7 @@ const salesRouter = router({
         totalPrice,
         profit,
         channel: input.channel,
+        terreiroId: input.channel === "terreiro" ? input.terreiroId! : null,
         saleDate: input.saleDate,
       });
       return { success: true };
@@ -1440,6 +1446,10 @@ const terreirosRouter = router({
   list: protectedProcedure
     .input(z.object({ includeInactive: z.boolean().optional() }).optional())
     .query(async ({ input }) => (await listTerreiros(input?.includeInactive ?? false)).map(stripPasswordHash)),
+
+  // Total gasto por parceiro (pedidos feitos na loja, canal "terreiro") —
+  // base pra decidir avanço de plano por volume de compra.
+  spendingTotals: protectedProcedure.query(() => getTerreiroSpendingTotals()),
 
   getById: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))

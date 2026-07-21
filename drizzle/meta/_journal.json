@@ -134,6 +134,13 @@
       "when": 1784592170676,
       "tag": "0018_crazy_imperial_guard",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1784593186687,
+      "tag": "0019_woozy_banshee",
+      "breakpoints": true
     }
   ]
 }

@@ -25,9 +25,12 @@ export default function Partners() {
   const { data: terreiros = [], isLoading } = trpc.terreiros.list.useQuery({ includeInactive: true });
   const { data: tiers = [] } = trpc.partnerTiers.list.useQuery();
   const { data: openConsignments = [] } = trpc.terreiros.consignments.openCountByTerreiro.useQuery();
+  const { data: spendingTotals = [] } = trpc.terreiros.spendingTotals.useQuery();
   const tierName = (tierId: number | null) => tiers.find((t) => t.id === tierId)?.name ?? null;
   const openItemsOf = (terreiroId: number) =>
     Number(openConsignments.find((c) => c.terreiroId === terreiroId)?.openItems ?? 0);
+  const spentBy = (terreiroId: number) =>
+    Number(spendingTotals.find((s: any) => s.terreiroId === terreiroId)?.totalSpent ?? 0);
 
   const createMutation = trpc.terreiros.create.useMutation({
     onSuccess: () => {
@@ -277,6 +280,9 @@ export default function Partners() {
                       </span>
                     )}
                   </div>
+                  <p className="text-xs text-foreground">
+                    Total gasto: <span className="font-semibold text-accent">R$ {(spentBy(t.id) / 100).toFixed(2)}</span>
+                  </p>
                   <div className="text-xs text-muted-foreground">
                     {(t.contactName || t.phone) && (
                       <p>
@@ -323,6 +329,7 @@ export default function Partners() {
                   <TableHead>Terreiro</TableHead>
                   <TableHead>Usuário</TableHead>
                   <TableHead>Plano</TableHead>
+                  <TableHead>Total gasto</TableHead>
                   <TableHead>Contato</TableHead>
                   <TableHead>Em comodato</TableHead>
                   <TableHead>Último acesso</TableHead>
@@ -341,6 +348,9 @@ export default function Partners() {
                       ) : (
                         <span className="text-xs text-muted-foreground">Sem plano</span>
                       )}
+                    </TableCell>
+                    <TableCell className="font-medium text-accent">
+                      R$ {(spentBy(t.id) / 100).toFixed(2)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {t.contactName || "-"}

@@ -267,6 +267,7 @@ export default function Sales() {
         quantity: item.quantity,
         unitPrice: effectiveUnitPrice,
         channel,
+        terreiroId: channel === "terreiro" && selectedTerreiroId ? selectedTerreiroId : undefined,
         saleDate: new Date(),
       });
     }

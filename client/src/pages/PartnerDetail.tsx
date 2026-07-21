@@ -36,6 +36,8 @@ export default function PartnerDetail() {
   const utils = trpc.useUtils();
   const { data: terreiro, isLoading } = trpc.terreiros.getById.useQuery({ id: terreiroId }, { enabled: !!terreiroId });
   const { data: tiers = [] } = trpc.partnerTiers.list.useQuery();
+  const { data: spendingTotals = [] } = trpc.terreiros.spendingTotals.useQuery();
+  const spending = spendingTotals.find((s: any) => s.terreiroId === terreiroId);
   const { data: priceRows = EMPTY_PRICE_ROWS, isLoading: loadingPrices } = trpc.terreiros.prices.list.useQuery(
     { terreiroId },
     { enabled: !!terreiroId }
@@ -138,6 +140,32 @@ export default function PartnerDetail() {
           <p className="text-muted-foreground text-sm">Gestão individual do terreiro parceiro</p>
         </div>
       </div>
+
+      <Card>
+        <CardContent className="flex flex-wrap items-center gap-6 pt-6">
+          <div>
+            <p className="text-xs text-muted-foreground">Total gasto na loja</p>
+            <p className="text-2xl font-bold text-accent">
+              R$ {((spending?.totalSpent ?? 0) / 100).toFixed(2)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Pedidos</p>
+            <p className="text-2xl font-bold text-foreground">{spending?.ordersCount ?? 0}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Última compra</p>
+            <p className="text-sm text-foreground pt-1.5">
+              {spending?.lastPurchaseAt
+                ? new Date(spending.lastPurchaseAt).toLocaleDateString("pt-BR")
+                : "Nenhuma ainda"}
+            </p>
+          </div>
+          <p className="text-xs text-muted-foreground w-full">
+            Usado como base pra decidir se esse parceiro merece subir de plano
+          </p>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

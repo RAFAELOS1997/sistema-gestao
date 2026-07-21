@@ -313,6 +313,12 @@ export async function runStartupMigrations() {
     console.error("[migrations] seedPaymentMethods:", error);
   }
 
+  try {
+    await db.execute(sql`ALTER TABLE sales ADD COLUMN terreiroId int`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] sales.terreiroId:", error);
+  }
+
   console.log("[migrations] Verificação de schema concluída.");
 }
 
@@ -341,6 +347,23 @@ export async function listSales(limit = 50) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(sales).orderBy(sql`${sales.saleDate} DESC`).limit(limit);
+}
+
+// Total gasto por parceiro (soma das vendas canal "terreiro" vinculadas a
+// cada terreiroId) — usado pra decidir avanço de plano por volume de compra.
+export async function getTerreiroSpendingTotals() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      terreiroId: sales.terreiroId,
+      totalSpent: sql<number>`COALESCE(SUM(${sales.totalPrice}), 0)`,
+      ordersCount: sql<number>`COUNT(*)`,
+      lastPurchaseAt: sql<string>`MAX(${sales.saleDate})`,
+    })
+    .from(sales)
+    .where(sql`${sales.terreiroId} IS NOT NULL`)
+    .groupBy(sales.terreiroId);
 }
 
 // ─── Analytics ────────────────────────────────────────────────────────────────
@@ -1168,6 +1191,7 @@ export async function markConsignmentSold(id: number, quantity: number) {
     totalPrice: consignment.unitPrice * quantity,
     profit: (consignment.unitPrice - costPrice) * quantity,
     channel: "terreiro",
+    terreiroId: consignment.terreiroId,
     saleDate: new Date(),
   });
   await db

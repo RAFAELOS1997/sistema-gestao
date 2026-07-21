@@ -42,6 +42,7 @@ export const sales = mysqlTable("sales", {
   totalPrice: int("totalPrice").notNull(), // em centavos
   profit: int("profit").notNull(), // em centavos
   channel: mysqlEnum("channel", ["fisico", "instagram", "terreiro"]).notNull().default("fisico"),
+  terreiroId: int("terreiroId"), // preenchido quando channel = "terreiro", pra somar gasto por parceiro
   saleDate: timestamp("saleDate").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
