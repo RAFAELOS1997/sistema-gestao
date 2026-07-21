@@ -8,6 +8,7 @@ import { Search, Plus, Minus, ChevronDown, ChevronUp, ShoppingCart, Package } fr
 import { toast } from "sonner";
 import { usePortalCart } from "@/contexts/PortalCartContext";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
+import { EntityShortcuts, EntityShortcut } from "@/components/EntityShortcuts";
 
 type Source = "catalogo" | "estoque";
 
@@ -31,6 +32,7 @@ export default function PortalGenerateOrder() {
   const [source, setSource] = useState<Source>("catalogo");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("todas");
+  const [activeEntity, setActiveEntity] = useState<EntityShortcut | null>(null);
   const { cart, setQuantity, clear: clearCart } = usePortalCart();
   const [cartExpanded, setCartExpanded] = useState(false);
 
@@ -108,7 +110,18 @@ export default function PortalGenerateOrder() {
   };
 
   return (
-    <div className="space-y-5 sm:space-y-6 pb-24">
+    <div className="relative isolate">
+      {/* Ambiente muda de cor conforme a entidade selecionada nos atalhos abaixo */}
+      <div
+        className="absolute -inset-x-4 -top-4 h-72 -z-10 pointer-events-none blur-3xl transition-opacity duration-700 rounded-3xl"
+        style={{
+          background: activeEntity
+            ? `linear-gradient(135deg, ${activeEntity.colors[0]}40, ${activeEntity.colors[1]}25)`
+            : "transparent",
+          opacity: activeEntity ? 1 : 0,
+        }}
+      />
+      <div className="space-y-5 sm:space-y-6 pb-24">
       <div>
         <h1 className="text-xl sm:text-3xl font-bold text-foreground">Gerar Pedidos</h1>
         <p className="text-muted-foreground text-sm">
@@ -116,6 +129,14 @@ export default function PortalGenerateOrder() {
           nos itens do fornecedor — itens do estoque não têm mínimo.
         </p>
       </div>
+
+      <EntityShortcuts
+        activeName={activeEntity?.name ?? null}
+        onSelect={(entity) => {
+          setActiveEntity(entity);
+          setSearch(entity?.searchTerm ?? "");
+        }}
+      />
 
       {/* Fonte: catálogo do fornecedor ou estoque da loja */}
       <div className="flex gap-2 border-b border-border">
@@ -322,6 +343,7 @@ export default function PortalGenerateOrder() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

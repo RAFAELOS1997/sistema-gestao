@@ -11,11 +11,12 @@ import { toast } from "sonner";
 import { useProntaEntregaCart } from "@/contexts/ProntaEntregaCartContext";
 import { QRCodeSVG } from "qrcode.react";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
-import { EntityShortcuts } from "@/components/EntityShortcuts";
+import { EntityShortcuts, EntityShortcut } from "@/components/EntityShortcuts";
 
 export default function PublicCatalogProducts() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("todas");
+  const [activeEntity, setActiveEntity] = useState<EntityShortcut | null>(null);
   const { cart, getQuantity, setQuantity, clear: clearCart, itemCount } = useProntaEntregaCart();
   const [cartExpanded, setCartExpanded] = useState(false);
   const [customerName, setCustomerName] = useState("");
@@ -94,7 +95,18 @@ export default function PublicCatalogProducts() {
   };
 
   return (
-    <div className="space-y-5 sm:space-y-6 pb-24">
+    <div className="relative isolate">
+      {/* Ambiente muda de cor conforme a entidade selecionada nos atalhos abaixo */}
+      <div
+        className="absolute -inset-x-4 -top-4 h-72 -z-10 pointer-events-none blur-3xl transition-opacity duration-700 rounded-3xl"
+        style={{
+          background: activeEntity
+            ? `linear-gradient(135deg, ${activeEntity.colors[0]}40, ${activeEntity.colors[1]}25)`
+            : "transparent",
+          opacity: activeEntity ? 1 : 0,
+        }}
+      />
+      <div className="space-y-5 sm:space-y-6 pb-24">
       <div>
         <h1 className="text-xl sm:text-3xl font-bold text-foreground">Pronta Entrega</h1>
         <p className="text-muted-foreground text-sm">
@@ -109,7 +121,13 @@ export default function PublicCatalogProducts() {
         Por enquanto entregamos só em Ribeirão Preto e região — em breve, pra todo o Brasil!
       </p>
 
-      <EntityShortcuts onSelect={setSearch} />
+      <EntityShortcuts
+        activeName={activeEntity?.name ?? null}
+        onSelect={(entity) => {
+          setActiveEntity(entity);
+          setSearch(entity?.searchTerm ?? "");
+        }}
+      />
 
       <div className="flex flex-col gap-3">
         <div className="relative">
@@ -345,6 +363,7 @@ export default function PublicCatalogProducts() {
           )}
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }

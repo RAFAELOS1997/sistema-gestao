@@ -6,11 +6,12 @@ import { trpc } from "@/lib/trpc";
 import { Search, Plus, Minus, ShoppingCart } from "lucide-react";
 import { usePortalCart } from "@/contexts/PortalCartContext";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
-import { EntityShortcuts } from "@/components/EntityShortcuts";
+import { EntityShortcuts, EntityShortcut } from "@/components/EntityShortcuts";
 
 export default function PortalProducts() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("todas");
+  const [activeEntity, setActiveEntity] = useState<EntityShortcut | null>(null);
   const { getQuantity, setQuantity, itemCount } = usePortalCart();
 
   const productsQuery = trpc.portal.products.list.useQuery();
@@ -30,7 +31,18 @@ export default function PortalProducts() {
   }, [products, search, category]);
 
   return (
-    <div className="space-y-5 sm:space-y-6 pb-20">
+    <div className="relative isolate">
+      {/* Ambiente muda de cor conforme a entidade selecionada nos atalhos abaixo */}
+      <div
+        className="absolute -inset-x-4 -top-4 h-72 -z-10 pointer-events-none blur-3xl transition-opacity duration-700 rounded-3xl"
+        style={{
+          background: activeEntity
+            ? `linear-gradient(135deg, ${activeEntity.colors[0]}40, ${activeEntity.colors[1]}25)`
+            : "transparent",
+          opacity: activeEntity ? 1 : 0,
+        }}
+      />
+      <div className="space-y-5 sm:space-y-6 pb-20">
       <div>
         <h1 className="text-xl sm:text-3xl font-bold text-foreground">Produtos em Estoque</h1>
         <p className="text-muted-foreground text-sm">
@@ -41,7 +53,13 @@ export default function PortalProducts() {
         </p>
       </div>
 
-      <EntityShortcuts onSelect={setSearch} />
+      <EntityShortcuts
+        activeName={activeEntity?.name ?? null}
+        onSelect={(entity) => {
+          setActiveEntity(entity);
+          setSearch(entity?.searchTerm ?? "");
+        }}
+      />
 
       <div className="flex flex-col gap-3">
         <div className="relative">
@@ -147,6 +165,7 @@ export default function PortalProducts() {
           </div>
         </Link>
       )}
+      </div>
     </div>
   );
 }
