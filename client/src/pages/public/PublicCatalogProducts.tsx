@@ -1,10 +1,15 @@
-import { useMemo, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ZoomableImage } from "@/components/ZoomableImage";
 import { trpc } from "@/lib/trpc";
-import { Search, Plus, Minus, ShoppingCart } from "lucide-react";
-import { usePublicCart } from "@/contexts/PublicCartContext";
+import { Search, Plus, Minus, ShoppingCart, ChevronDown, ChevronUp, QrCode, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
+import { useProntaEntregaCart } from "@/contexts/ProntaEntregaCartContext";
+import { QRCodeSVG } from "qrcode.react";
 
 const CATEGORY_LABELS: Record<string, string> = {
   guias: "Guias",
@@ -23,10 +28,34 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function PublicCatalogProducts() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("todas");
-  const { getQuantity, setQuantity, itemCount } = usePublicCart();
+  const { cart, getQuantity, setQuantity, clear: clearCart, itemCount } = useProntaEntregaCart();
+  const [cartExpanded, setCartExpanded] = useState(false);
+  const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [charge, setCharge] = useState<{ orderNsu: string; checkoutUrl: string } | null>(null);
+  const [paid, setPaid] = useState(false);
 
   const productsQuery = trpc.publicStore.products.list.useQuery();
   const products = productsQuery.data ?? [];
+
+  const checkoutMutation = trpc.publicStore.prontaEntrega.checkout.useMutation({
+    onSuccess: (result) => setCharge({ orderNsu: result.orderNsu, checkoutUrl: result.checkoutUrl }),
+    onError: (error) => toast.error(error.message),
+  });
+
+  const statusQuery = trpc.publicStore.prontaEntrega.checkStatus.useQuery(
+    { orderNsu: charge?.orderNsu ?? "" },
+    { enabled: !!charge, refetchInterval: 4000 }
+  );
+
+  useEffect(() => {
+    if (statusQuery.data?.status === "paid" && charge && !paid) {
+      setPaid(true);
+      clearCart();
+      setCartExpanded(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [statusQuery.data?.status]);
 
   const categories = useMemo(() => Array.from(new Set(products.map((p) => p.category))), [products]);
 
@@ -38,12 +67,45 @@ export default function PublicCatalogProducts() {
     });
   }, [products, search, category]);
 
+  const cartItems = useMemo(() => {
+    return Object.entries(cart)
+      .map(([id, quantity]) => {
+        const product = products.find((p) => p.id === Number(id));
+        if (!product || quantity <= 0) return null;
+        return { id: Number(id), name: product.name, price: product.price, quantity, total: product.price * quantity };
+      })
+      .filter((i): i is NonNullable<typeof i> => i !== null);
+  }, [cart, products]);
+
+  const subtotal = cartItems.reduce((sum, i) => sum + i.total, 0);
+
+  const handleCheckout = () => {
+    if (cartItems.length === 0) {
+      toast.error("Adicione ao menos um item ao carrinho");
+      return;
+    }
+    if (!customerName.trim() || !customerPhone.trim()) {
+      toast.error("Informe seu nome e telefone");
+      return;
+    }
+    checkoutMutation.mutate({
+      customerName: customerName.trim(),
+      customerPhone: customerPhone.trim(),
+      items: cartItems.map((i) => ({ productId: i.id, quantity: i.quantity })),
+    });
+  };
+
+  const closeDialog = () => {
+    setCharge(null);
+    setPaid(false);
+  };
+
   return (
-    <div className="space-y-5 sm:space-y-6 pb-20">
+    <div className="space-y-5 sm:space-y-6 pb-24">
       <div>
-        <h1 className="text-xl sm:text-3xl font-bold text-foreground">Nossos Produtos</h1>
+        <h1 className="text-xl sm:text-3xl font-bold text-foreground">Pronta Entrega</h1>
         <p className="text-muted-foreground text-sm">
-          Confira o que está disponível e monte seu pedido direto aqui
+          Compre agora e pague na hora pelo InfinitePay
           {!productsQuery.isLoading && products.length > 0 && (
             <span> — {filtered.length === products.length ? `${products.length} produto(s)` : `${filtered.length} de ${products.length} produto(s)`}</span>
           )}
@@ -94,7 +156,7 @@ export default function PublicCatalogProducts() {
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {filtered.map((product) => {
-            const qty = getQuantity("estoque", product.id);
+            const qty = getQuantity(product.id);
             return (
               <div key={product.id} className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
                 <div className="aspect-square bg-background flex items-center justify-center text-muted-foreground text-xs overflow-hidden">
@@ -111,7 +173,7 @@ export default function PublicCatalogProducts() {
                   <p className="text-base sm:text-lg font-bold mt-1 text-accent">R$ {(product.price / 100).toFixed(2)}</p>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-border">
                     <button
-                      onClick={() => setQuantity("estoque", product.id, qty - 1)}
+                      onClick={() => setQuantity(product.id, qty - 1)}
                       disabled={qty === 0}
                       className="p-1.5 rounded bg-background border border-border text-accent disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/10 transition-colors"
                     >
@@ -119,7 +181,7 @@ export default function PublicCatalogProducts() {
                     </button>
                     <span className="text-base font-bold text-foreground">{qty}</span>
                     <button
-                      onClick={() => setQuantity("estoque", product.id, qty + 1)}
+                      onClick={() => setQuantity(product.id, qty + 1)}
                       disabled={qty >= product.currentStock}
                       className="p-1.5 rounded bg-accent text-accent-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/90 transition-colors"
                     >
@@ -133,17 +195,149 @@ export default function PublicCatalogProducts() {
         </div>
       )}
 
-      {itemCount > 0 && (
-        <Link href="/loja/pedidos">
-          <div className="fixed bottom-4 left-3 right-3 sm:left-auto sm:right-6 sm:w-80 z-30 bg-accent text-accent-foreground rounded-lg shadow-xl px-4 py-3 flex items-center justify-between cursor-pointer">
-            <span className="flex items-center gap-2 text-sm font-medium">
-              <ShoppingCart className="w-4 h-4" />
-              {itemCount} item(ns) no pedido
-            </span>
-            <span className="text-sm font-semibold">Revisar e enviar →</span>
+      {/* Carrinho + checkout fixado embaixo */}
+      {cartItems.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 px-3 sm:px-6 pb-3 sm:pb-6 pt-3 bg-gradient-to-t from-background via-background to-transparent">
+          <div className="max-w-6xl mx-auto">
+            <Card className="border border-accent/30 bg-card shadow-xl">
+              <button
+                type="button"
+                onClick={() => setCartExpanded((v) => !v)}
+                className="w-full flex items-center justify-between px-4 py-3"
+              >
+                <div className="flex items-center gap-2">
+                  <ShoppingCart className="w-5 h-5 text-accent" />
+                  <span className="text-sm text-foreground font-medium">{itemCount} item(ns)</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold text-accent">R$ {(subtotal / 100).toFixed(2)}</span>
+                  {cartExpanded ? <ChevronDown className="w-5 h-5 text-muted-foreground" /> : <ChevronUp className="w-5 h-5 text-muted-foreground" />}
+                </div>
+              </button>
+
+              {cartExpanded && (
+                <CardContent className="space-y-3 pt-0 border-t border-border max-h-[50vh] overflow-y-auto">
+                  <div className="space-y-2 pt-3">
+                    {cartItems.map((item) => (
+                      <div key={item.id} className="flex items-center justify-between gap-2 p-2 bg-background rounded border border-border">
+                        <p className="text-sm text-foreground flex-1 truncate">{item.name}</p>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button onClick={() => setQuantity(item.id, item.quantity - 1)} className="p-1 hover:bg-accent/20 rounded">
+                            <Minus className="w-3 h-3 text-accent" />
+                          </button>
+                          <span className="w-6 text-center text-sm text-foreground font-semibold">{item.quantity}</span>
+                          <button onClick={() => setQuantity(item.id, item.quantity + 1)} className="p-1 hover:bg-accent/20 rounded">
+                            <Plus className="w-3 h-3 text-accent" />
+                          </button>
+                        </div>
+                        <span className="text-sm font-semibold text-foreground w-20 text-right shrink-0">
+                          R$ {(item.total / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <div>
+                      <Label htmlFor="pe-customerName" className="text-xs">Seu nome</Label>
+                      <Input
+                        id="pe-customerName"
+                        value={customerName}
+                        onChange={(e) => setCustomerName(e.target.value)}
+                        className="h-9 mt-1"
+                        placeholder="Nome completo"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="pe-customerPhone" className="text-xs">Telefone (WhatsApp)</Label>
+                      <Input
+                        id="pe-customerPhone"
+                        value={customerPhone}
+                        onChange={(e) => setCustomerPhone(e.target.value)}
+                        className="h-9 mt-1"
+                        placeholder="(00) 00000-0000"
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              )}
+
+              <div className="px-4 pb-4">
+                <Button
+                  className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                  disabled={checkoutMutation.isPending}
+                  onClick={() => { setCartExpanded(true); handleCheckout(); }}
+                >
+                  {checkoutMutation.isPending ? "Gerando cobrança..." : "Finalizar com InfinitePay"}
+                </Button>
+              </div>
+            </Card>
           </div>
-        </Link>
+        </div>
       )}
+
+      {/* Cobrança InfinitePay: QR Code + aguardando pagamento */}
+      <Dialog open={!!charge} onOpenChange={(open) => { if (!open) closeDialog(); }}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <QrCode className="w-5 h-5 text-accent" />
+              Pagamento
+            </DialogTitle>
+            <DialogDescription>
+              R$ {(subtotal / 100).toFixed(2)} — escaneie o QR Code com a câmera do celular ou abra o link
+            </DialogDescription>
+          </DialogHeader>
+
+          {charge && (
+            <div className="flex flex-col items-center gap-4 py-2">
+              {paid ? (
+                <div className="flex flex-col items-center gap-2 py-8">
+                  <CheckCircle2 className="w-16 h-16 text-green-500" />
+                  <p className="text-foreground font-semibold">Pagamento confirmado!</p>
+                  <p className="text-sm text-muted-foreground text-center">
+                    Recebemos seu pedido. Vamos combinar a entrega ou retirada pelo telefone informado.
+                  </p>
+                  <Button onClick={closeDialog} className="bg-accent text-accent-foreground hover:bg-accent/90 mt-2">
+                    Fechar
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <div className="bg-white p-3 rounded-lg">
+                    <QRCodeSVG value={charge.checkoutUrl} size={224} />
+                  </div>
+                  <a
+                    href={charge.checkoutUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-accent hover:underline flex items-center gap-1"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Abrir link do pagamento
+                  </a>
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Aguardando pagamento...
+                  </div>
+                  <div className="flex gap-2 w-full">
+                    <Button
+                      variant="outline"
+                      className="flex-1 border-border"
+                      onClick={() => statusQuery.refetch()}
+                      disabled={statusQuery.isFetching}
+                    >
+                      {statusQuery.isFetching ? "Verificando..." : "Já paguei — verificar"}
+                    </Button>
+                    <Button variant="outline" className="border-destructive/40 text-destructive" onClick={closeDialog}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

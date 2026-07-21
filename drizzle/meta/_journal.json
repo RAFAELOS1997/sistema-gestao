@@ -162,6 +162,13 @@
       "when": 1784595621611,
       "tag": "0022_cooing_falcon",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "5",
+      "when": 1784597771175,
+      "tag": "0023_good_gunslinger",
+      "breakpoints": true
     }
   ]
 }

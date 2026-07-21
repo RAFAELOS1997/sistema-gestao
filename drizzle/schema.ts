@@ -41,7 +41,7 @@ export const sales = mysqlTable("sales", {
   unitPrice: int("unitPrice").notNull(), // em centavos
   totalPrice: int("totalPrice").notNull(), // em centavos
   profit: int("profit").notNull(), // em centavos
-  channel: mysqlEnum("channel", ["fisico", "instagram", "terreiro"]).notNull().default("fisico"),
+  channel: mysqlEnum("channel", ["fisico", "instagram", "terreiro", "site"]).notNull().default("fisico"),
   terreiroId: int("terreiroId"), // preenchido quando channel = "terreiro", pra somar gasto por parceiro
   saleDate: timestamp("saleDate").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -155,6 +155,7 @@ export const infinitePayCharges = mysqlTable("infinitePayCharges", {
   paidAmountCents: int("paidAmountCents"),
   captureMethod: varchar("captureMethod", { length: 32 }),
   receiptUrl: text("receiptUrl"),
+  publicOrderId: int("publicOrderId"), // preenchido quando a cobrança é do checkout Pronta Entrega
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -394,6 +395,7 @@ export const publicOrders = mysqlTable("publicOrders", {
   customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
   subtotal: int("subtotal").notNull(), // em centavos
   status: mysqlEnum("status", ["pendente", "confirmado", "entregue", "cancelado"]).notNull().default("pendente"),
+  paymentMethod: varchar("paymentMethod", { length: 50 }), // "infinitepay" pros pedidos de Pronta Entrega já pagos, null pros pedidos por encomenda (Fazer Pedidos)
   notes: text("notes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

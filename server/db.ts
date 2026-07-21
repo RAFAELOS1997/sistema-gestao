@@ -413,6 +413,25 @@ export async function runStartupMigrations() {
     console.error("[migrations] publicOrderItems:", error);
   }
 
+  // MODIFY COLUMN com a lista completa do enum é seguro de rodar de novo.
+  try {
+    await db.execute(sql`ALTER TABLE sales MODIFY COLUMN channel enum('fisico','instagram','terreiro','site') NOT NULL DEFAULT 'fisico'`);
+  } catch (error: any) {
+    console.error("[migrations] sales.channel site:", error);
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE publicOrders ADD COLUMN paymentMethod varchar(50)`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] publicOrders.paymentMethod:", error);
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE infinitePayCharges ADD COLUMN publicOrderId int`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] infinitePayCharges.publicOrderId:", error);
+  }
+
   console.log("[migrations] Verificação de schema concluída.");
 }
 
@@ -1483,12 +1502,13 @@ export async function createPublicOrder(
     quantity: number;
     unitPrice: number;
     totalPrice: number;
-  }[]
+  }[],
+  paymentMethod?: string
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
-  const orderResult = await db.insert(publicOrders).values({ customerName, customerPhone, subtotal, status: "pendente" });
+  const orderResult = await db.insert(publicOrders).values({ customerName, customerPhone, subtotal, status: "pendente", paymentMethod: paymentMethod ?? null });
   const orderId = ((orderResult as any)[0]?.insertId ?? (orderResult as any).insertId) as number;
   await db.insert(publicOrderItems).values(
     items.map((item) => ({
@@ -1520,6 +1540,44 @@ export async function updatePublicOrderStatus(id: number, status: "pendente" | "
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(publicOrders).set({ status }).where(eq(publicOrders.id, id));
+}
+
+// Chamado depois que uma cobrança InfinitePay é confirmada como paga (pelo
+// webhook ou pelo polling do cliente) — se essa cobrança é de um pedido
+// Pronta Entrega, dá baixa no estoque e registra a venda de verdade (pra
+// entrar no Dashboard/Controle de Vendas), e marca o pedido como confirmado.
+// Idempotente: só age se o pedido ainda estiver "pendente".
+export async function fulfillPublicOrderForCharge(orderNsu: string) {
+  const db = await getDb();
+  if (!db) return;
+  const charge = await getInfinitePayChargeByOrderNsu(orderNsu);
+  if (!charge?.publicOrderId) return;
+
+  const orderRows = await db.select().from(publicOrders).where(eq(publicOrders.id, charge.publicOrderId)).limit(1);
+  const order = orderRows[0];
+  if (!order || order.status !== "pendente") return;
+
+  const items = await db.select().from(publicOrderItems).where(eq(publicOrderItems.publicOrderId, order.id));
+  for (const item of items) {
+    if (item.source !== "estoque" || !item.productId) continue;
+    const product = await getProductById(item.productId);
+    const costPrice = product?.costPrice ?? 0;
+    await db.insert(sales).values({
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+      profit: (item.unitPrice - costPrice) * item.quantity,
+      channel: "site",
+      saleDate: new Date(),
+    });
+    await db
+      .update(products)
+      .set({ currentStock: sql`${products.currentStock} - ${item.quantity}` })
+      .where(eq(products.id, item.productId));
+  }
+
+  await db.update(publicOrders).set({ status: "confirmado" }).where(eq(publicOrders.id, order.id));
 }
 
 // ─── Cobranças InfinitePay ─────────────────────────────────────────────────────

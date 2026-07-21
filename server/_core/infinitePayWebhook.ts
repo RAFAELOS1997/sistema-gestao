@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { checkPayment } from "./infinitePay";
-import { getSystemConfig, getInfinitePayChargeByOrderNsu, markInfinitePayChargePaid } from "../db";
+import { getSystemConfig, getInfinitePayChargeByOrderNsu, markInfinitePayChargePaid, fulfillPublicOrderForCharge } from "../db";
 
 // Webhook da InfinitePay: chamado por eles quando um pagamento é aprovado.
 // A API não tem assinatura/HMAC — qualquer um que descubra essa URL poderia
@@ -43,6 +43,7 @@ export function registerInfinitePayWebhook(app: Express) {
           captureMethod: verified.captureMethod,
           receiptUrl: req.body?.receipt_url,
         });
+        await fulfillPublicOrderForCharge(orderNsu);
       } else {
         console.warn(`[infinitepay webhook] order_nsu ${orderNsu}: webhook chegou mas checkPayment não confirmou pagamento`);
       }

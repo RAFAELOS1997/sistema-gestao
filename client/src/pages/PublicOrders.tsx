@@ -68,9 +68,16 @@ export default function PublicOrders() {
                       <p className="font-medium text-foreground text-sm">Pedido #{order.id}</p>
                       <p className="text-xs text-muted-foreground">{order.customerName} · {order.customerPhone}</p>
                     </div>
-                    <Badge className={`shrink-0 text-[10px] ${STATUS_COLORS[order.status] ?? ""}`}>
-                      {STATUS_LABELS[order.status] ?? order.status}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <Badge className={`text-[10px] ${STATUS_COLORS[order.status] ?? ""}`}>
+                        {STATUS_LABELS[order.status] ?? order.status}
+                      </Badge>
+                      {order.paymentMethod === "infinitepay" && (
+                        <Badge className="text-[10px] bg-green-900/40 text-green-400 border-green-700">
+                          Pago via InfinitePay
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                   <div className="text-xs text-muted-foreground space-y-0.5">
                     {order.items.map((item: any) => (
@@ -124,6 +131,14 @@ export default function PublicOrders() {
                       {order.customerName}
                       <br />
                       <span className="text-xs">{order.customerPhone}</span>
+                      {order.paymentMethod === "infinitepay" && (
+                        <>
+                          <br />
+                          <Badge className="text-[10px] mt-1 bg-green-900/40 text-green-400 border-green-700">
+                            Pago via InfinitePay
+                          </Badge>
+                        </>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm max-w-xs">
                       {order.items

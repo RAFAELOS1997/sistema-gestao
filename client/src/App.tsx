@@ -23,6 +23,7 @@ import PublicGenerateOrder from "./pages/public/PublicGenerateOrder";
 import PublicOrders from "./pages/PublicOrders";
 import { PortalCartProvider } from "./contexts/PortalCartContext";
 import { PublicCartProvider } from "./contexts/PublicCartContext";
+import { ProntaEntregaCartProvider } from "./contexts/ProntaEntregaCartContext";
 import PriceReview from "./pages/PriceReview";
 import SupplierCatalog from "./pages/SupplierCatalog";
 import AuditPedido7335 from "./pages/AuditPedido7335";
@@ -178,7 +179,9 @@ function App() {
           <Toaster />
           <PortalCartProvider>
             <PublicCartProvider>
-              <Router />
+              <ProntaEntregaCartProvider>
+                <Router />
+              </ProntaEntregaCartProvider>
             </PublicCartProvider>
           </PortalCartProvider>
         </TooltipProvider>

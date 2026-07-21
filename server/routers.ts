@@ -97,6 +97,7 @@ import {
   createPublicOrder,
   listAllPublicOrders,
   updatePublicOrderStatus,
+  fulfillPublicOrderForCharge,
 } from "./db";
 
 // O hash de senha (scrypt) nunca deve sair do servidor — sem isso, auth.me e
@@ -1836,6 +1837,96 @@ const publicStoreRouter = router({
         price: item.salePrice,
       }));
     }),
+  }),
+
+  // Aba "Pronta Entrega": compra direta, com pagamento na hora via
+  // InfinitePay — carrinho separado do de "Fazer Pedidos" (aquele é só um
+  // pedido por encomenda, sem pagamento). Preço é o preço cheio mostrado na
+  // vitrine, sem os 5% de "Fazer Pedidos". Igual ao padrão já usado nas
+  // Vendas: nunca confia em pagamento sem reconferir direto na InfinitePay.
+  prontaEntrega: router({
+    checkout: publicProcedure
+      .input(
+        z.object({
+          customerName: z.string().min(1).max(255),
+          customerPhone: z.string().min(8).max(20),
+          items: z.array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().positive() })).min(1),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const config = await getSystemConfig();
+        const handle = config?.infinitePayHandle;
+        if (!handle) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: "A loja ainda não configurou pagamento online. Fale com a gente pra finalizar seu pedido.",
+          });
+        }
+
+        const stockItems = await listActiveProductsFullPrice();
+        const stockById = new Map(stockItems.map((i) => [i.id, i]));
+        const orderItems = input.items.map(({ productId, quantity }) => {
+          const stockItem = stockById.get(productId);
+          if (!stockItem) throw new TRPCError({ code: "BAD_REQUEST", message: "Produto não encontrado ou sem estoque" });
+          if (quantity > stockItem.currentStock) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: `Só há ${stockItem.currentStock} unidade(s) de "${stockItem.name}" em estoque` });
+          }
+          const unitPrice = Math.max(stockItem.salePrice, Math.ceil(stockItem.costPrice * MIN_ORDER_MARGIN_MULT));
+          return {
+            source: "estoque" as const,
+            productId,
+            name: stockItem.name,
+            quantity,
+            unitPrice,
+            totalPrice: unitPrice * quantity,
+          };
+        });
+        const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+
+        const order = await createPublicOrder(input.customerName, input.customerPhone, orderItems, "infinitepay");
+
+        const orderNsu = randomUUID();
+        const { url } = await createPaymentLink({
+          handle,
+          orderNsu,
+          items: orderItems.map((i) => ({ quantity: i.quantity, price: i.unitPrice, description: i.name })),
+          webhookUrl: `${PUBLIC_BASE_URL}/api/webhooks/infinitepay`,
+        });
+        await createInfinitePayCharge({
+          orderNsu,
+          amountCents: subtotal,
+          description: `Pedido site #${order.id}`,
+          checkoutUrl: url,
+          publicOrderId: order.id,
+        });
+
+        return { orderNsu, checkoutUrl: url, orderId: order.id, subtotal };
+      }),
+
+    // Mesma lógica de checkChargeStatus (staff): sempre reconfere direto na
+    // InfinitePay antes de considerar pago, já que a API não tem assinatura.
+    checkStatus: publicProcedure
+      .input(z.object({ orderNsu: z.string().min(1) }))
+      .query(async ({ input }) => {
+        const charge = await getInfinitePayChargeByOrderNsu(input.orderNsu);
+        if (!charge) throw new TRPCError({ code: "NOT_FOUND", message: "Cobrança não encontrada" });
+        if (charge.status === "paid") return { status: "paid" as const };
+
+        const config = await getSystemConfig();
+        const handle = config?.infinitePayHandle;
+        if (handle) {
+          const result = await checkPayment({ handle, orderNsu: input.orderNsu });
+          if (result.paid) {
+            await markInfinitePayChargePaid(input.orderNsu, {
+              paidAmountCents: result.paidAmount,
+              captureMethod: result.captureMethod,
+            });
+            await fulfillPublicOrderForCharge(input.orderNsu);
+            return { status: "paid" as const };
+          }
+        }
+        return { status: "pending" as const };
+      }),
   }),
 
   // Aba "Fazer Pedidos": catálogo do fornecedor (nunca revela quem é) +
