@@ -190,6 +190,13 @@
       "when": 1784660138770,
       "tag": "0026_common_shiva",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1784661305454,
+      "tag": "0027_sturdy_major_mapleleaf",
+      "breakpoints": true
     }
   ]
 }

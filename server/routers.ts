@@ -89,6 +89,12 @@ import {
   createConsignment,
   markConsignmentSold,
   markConsignmentReturned,
+  createConsignmentRequest,
+  listConsignmentRequestsForTerreiro,
+  listPendingConsignmentRequestsForTerreiro,
+  countPendingConsignmentRequestsByTerreiro,
+  cancelConsignmentRequest,
+  fulfillConsignmentRequest,
   createInfinitePayCharge,
   getInfinitePayChargeByOrderNsu,
   markInfinitePayChargePaid,
@@ -1677,6 +1683,49 @@ const terreirosRouter = router({
         return { success: true };
       }),
   }),
+
+  // Solicitações de comodato feitas pelo terreiro na aba "Comodato" do
+  // Portal — Rafael confirma na entrega (define o preço combinado ali, o
+  // estoque só baixa nesse momento) ou cancela.
+  consignmentRequests: router({
+    pendingForTerreiro: protectedProcedure
+      .input(z.object({ terreiroId: z.number().int().positive() }))
+      .query(({ input }) => listPendingConsignmentRequestsForTerreiro(input.terreiroId)),
+
+    pendingCountByTerreiro: protectedProcedure.query(() => countPendingConsignmentRequestsByTerreiro()),
+
+    confirm: protectedProcedure
+      .input(
+        z.object({
+          id: z.number().int().positive(),
+          items: z.array(z.object({ itemId: z.number().int().positive(), unitPrice: z.number().int().positive() })).min(1),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const result = await fulfillConsignmentRequest(input.id, input.items);
+        const tierUpdate = await ensureMinimumBronzeForConsignment(result.terreiroId);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "consignment_request_fulfilled",
+          module: "partners",
+          description: `Solicitação de comodato ID ${input.id} entregue e confirmada`,
+        });
+        return { success: true, tierUpgraded: tierUpdate?.upgraded ?? false, newTierName: tierUpdate?.upgraded ? tierUpdate.tierName : null };
+      }),
+
+    cancel: protectedProcedure
+      .input(z.object({ id: z.number().int().positive() }))
+      .mutation(async ({ input, ctx }) => {
+        await cancelConsignmentRequest(input.id);
+        await createAuditLog({
+          userId: ctx.user.id,
+          action: "consignment_request_cancelled",
+          module: "partners",
+          description: `Solicitação de comodato ID ${input.id} cancelada`,
+        });
+        return { success: true };
+      }),
+  }),
 });
 
 // ─── Portal do Parceiro (acesso dos terreiros) ────────────────────────────────
@@ -1831,6 +1880,36 @@ const portalRouter = router({
     list: terreiroProcedure
       .input(z.object({ includeSettled: z.boolean().optional() }).optional())
       .query(({ ctx, input }) => listConsignments(ctx.terreiro.id, input?.includeSettled ?? false)),
+  }),
+
+  // "Solicitar Produtos" na aba Comodato: o terreiro pede itens do ESTOQUE
+  // DA LOJA (nunca do catálogo do fornecedor) pra Rafael entregar em
+  // comodato. Não baixa estoque nem cria o comodato ainda — só quando o
+  // admin confirma a entrega (terreiros.consignmentRequests.confirm).
+  consignmentRequests: router({
+    list: terreiroProcedure.query(({ ctx }) => listConsignmentRequestsForTerreiro(ctx.terreiro.id)),
+
+    create: terreiroProcedure
+      .input(
+        z.object({
+          items: z.array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().positive() })).min(1),
+          notes: z.string().max(500).optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const stockItems = await listPartnerVisibleProducts(ctx.terreiro.id, ctx.terreiro.tierId);
+        const stockById = new Map(stockItems.map((i) => [i.id, i]));
+        const items = input.items.map(({ productId, quantity }) => {
+          const item = stockById.get(productId);
+          if (!item) throw new TRPCError({ code: "BAD_REQUEST", message: "Produto não encontrado ou indisponível" });
+          if (quantity > item.currentStock) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: `Só há ${item.currentStock} unidade(s) de "${item.name}" em estoque` });
+          }
+          return { productId, name: item.name, quantity };
+        });
+        const result = await createConsignmentRequest(ctx.terreiro.id, items, input.notes);
+        return { success: true, requestId: result.id };
+      }),
   }),
 
   // Tela "Gerar Pedidos": dois catálogos pra montar o pedido — itens do

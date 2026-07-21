@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PackagePlus } from "lucide-react";
+import { PackagePlus, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -18,6 +18,8 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
   const [showSettled, setShowSettled] = useState(false);
   const [form, setForm] = useState({ productId: "", quantity: "1", unitPrice: "", notes: "" });
   const [qtyDrafts, setQtyDrafts] = useState<Record<number, string>>({});
+  const [confirmingRequestId, setConfirmingRequestId] = useState<number | null>(null);
+  const [priceDrafts, setPriceDrafts] = useState<Record<number, string>>({});
 
   const utils = trpc.useUtils();
   const { data: consignments = [], isLoading } = trpc.terreiros.consignments.list.useQuery({
@@ -25,6 +27,7 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
     includeSettled: showSettled,
   });
   const { data: products = [] } = trpc.products.list.useQuery({});
+  const { data: pendingRequests = [] } = trpc.terreiros.consignmentRequests.pendingForTerreiro.useQuery({ terreiroId });
 
   const selectedProductId = form.productId ? Number(form.productId) : null;
   const { data: suggestedPrice } = trpc.terreiros.consignments.suggestedPrice.useQuery(
@@ -75,6 +78,57 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
     onError: (error) => toast.error(`Erro: ${error.message}`),
   });
 
+  const confirmRequestMutation = trpc.terreiros.consignmentRequests.confirm.useMutation({
+    onSuccess: (result) => {
+      toast.success("Entrega confirmada! Comodato registrado e estoque baixado.");
+      if (result.tierUpgraded && result.newTierName) {
+        toast.success(`Plano do terreiro subiu pra ${result.newTierName} por causa do stand de comodato!`);
+      }
+      setConfirmingRequestId(null);
+      setPriceDrafts({});
+      invalidate();
+      utils.terreiros.consignmentRequests.pendingForTerreiro.invalidate({ terreiroId });
+      utils.terreiros.consignmentRequests.pendingCountByTerreiro.invalidate();
+    },
+    onError: (error) => toast.error(`Erro: ${error.message}`),
+  });
+
+  const cancelRequestMutation = trpc.terreiros.consignmentRequests.cancel.useMutation({
+    onSuccess: () => {
+      toast.success("Solicitação cancelada");
+      utils.terreiros.consignmentRequests.pendingForTerreiro.invalidate({ terreiroId });
+      utils.terreiros.consignmentRequests.pendingCountByTerreiro.invalidate();
+    },
+    onError: (error) => toast.error(`Erro: ${error.message}`),
+  });
+
+  const openConfirmDialog = async (request: any) => {
+    setConfirmingRequestId(request.id);
+    const drafts: Record<number, string> = {};
+    for (const item of request.items) {
+      try {
+        const suggested = await utils.terreiros.consignments.suggestedPrice.fetch({ terreiroId, productId: item.productId });
+        drafts[item.id] = suggested != null ? (suggested / 100).toFixed(2) : "";
+      } catch {
+        drafts[item.id] = "";
+      }
+    }
+    setPriceDrafts(drafts);
+  };
+
+  const handleConfirmRequest = (request: any) => {
+    const items = request.items.map((item: any) => {
+      const raw = priceDrafts[item.id];
+      const unitPrice = Math.round(Number((raw ?? "").replace(",", ".")) * 100);
+      return { itemId: item.id, unitPrice };
+    });
+    if (items.some((i: any) => !i.unitPrice || i.unitPrice < 1)) {
+      toast.error("Informe o preço combinado de todos os itens");
+      return;
+    }
+    confirmRequestMutation.mutate({ id: request.id, items });
+  };
+
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     const productId = Number(form.productId);
@@ -97,6 +151,90 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
   };
 
   return (
+    <div className="space-y-6">
+      {pendingRequests.length > 0 && (
+        <Card className="border-accent/40">
+          <CardHeader>
+            <CardTitle>Solicitações de Comodato Pendentes</CardTitle>
+            <CardDescription>Esse terreiro pediu esses itens — confirme quando entregar (define o preço combinado na hora)</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {pendingRequests.map((request: any) => (
+              <div key={request.id} className="p-3 bg-background rounded-lg border border-border">
+                <div className="flex items-start justify-between gap-2 flex-wrap">
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      Pedido #{request.id} · {new Date(request.createdAt).toLocaleDateString("pt-BR")}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {request.items.map((i: any) => `${i.quantity}x ${i.name}`).join(", ")}
+                    </p>
+                    {request.notes && <p className="text-xs text-muted-foreground mt-0.5">"{request.notes}"</p>}
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <Button size="sm" className="h-8 bg-accent text-accent-foreground hover:bg-accent/90" onClick={() => openConfirmDialog(request)}>
+                      <Check className="w-3.5 h-3.5 mr-1" />
+                      Confirmar Entrega
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8"
+                      onClick={() => cancelRequestMutation.mutate({ id: request.id })}
+                      disabled={cancelRequestMutation.isPending}
+                    >
+                      <X className="w-3.5 h-3.5 mr-1" />
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      <Dialog open={confirmingRequestId !== null} onOpenChange={(open) => { if (!open) { setConfirmingRequestId(null); setPriceDrafts({}); } }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar entrega do comodato</DialogTitle>
+            <DialogDescription>Defina o preço combinado de cada item — o estoque é baixado ao confirmar</DialogDescription>
+          </DialogHeader>
+          {(() => {
+            const request = pendingRequests.find((r: any) => r.id === confirmingRequestId);
+            if (!request) return null;
+            return (
+              <div className="space-y-3">
+                {request.items.map((item: any) => (
+                  <div key={item.id} className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-foreground truncate">{item.name}</p>
+                      <p className="text-xs text-muted-foreground">Quantidade: {item.quantity}</p>
+                    </div>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      className="w-28"
+                      placeholder="R$"
+                      value={priceDrafts[item.id] ?? ""}
+                      onChange={(e) => setPriceDrafts({ ...priceDrafts, [item.id]: e.target.value })}
+                    />
+                  </div>
+                ))}
+                <Button
+                  className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                  onClick={() => handleConfirmRequest(request)}
+                  disabled={confirmRequestMutation.isPending}
+                >
+                  {confirmRequestMutation.isPending ? "Confirmando..." : "Confirmar entrega"}
+                </Button>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
     <Card>
       <CardHeader className="flex flex-row items-center justify-between flex-wrap gap-2">
         <div>
@@ -265,5 +403,6 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
         )}
       </CardContent>
     </Card>
+    </div>
   );
 }

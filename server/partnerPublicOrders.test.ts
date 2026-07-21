@@ -166,6 +166,36 @@ describe("partnerOrders.list / publicOrders.list", () => {
   });
 });
 
+// ─── Solicitações de Comodato (aba "Comodato" do Portal) ──────────────────────
+
+describe("portal.consignmentRequests / terreiros.consignmentRequests", () => {
+  it("portal.consignmentRequests.create/list exigem sessão de parceiro", async () => {
+    const anonCaller = appRouter.createCaller(createPublicContext());
+    await expect(
+      anonCaller.portal.consignmentRequests.create({ items: [{ productId: 1, quantity: 1 }] })
+    ).rejects.toMatchObject({ message: PARTNER_UNAUTHED_ERR_MSG });
+    await expect(anonCaller.portal.consignmentRequests.list()).rejects.toMatchObject({ message: PARTNER_UNAUTHED_ERR_MSG });
+  });
+
+  it("terreiro não consegue solicitar produto que não está no seu estoque visível", async () => {
+    const caller = appRouter.createCaller(createTerreiroContext());
+    await expect(
+      caller.portal.consignmentRequests.create({ items: [{ productId: 999999, quantity: 1 }] })
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("terreiros.consignmentRequests.confirm/cancel exigem sessão de staff", async () => {
+    const anonCaller = appRouter.createCaller(createPublicContext());
+    await expect(
+      anonCaller.terreiros.consignmentRequests.confirm({ id: 1, items: [{ itemId: 1, unitPrice: 100 }] })
+    ).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG });
+    await expect(anonCaller.terreiros.consignmentRequests.cancel({ id: 1 })).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG });
+
+    const terreiroCaller = appRouter.createCaller(createTerreiroContext());
+    await expect(terreiroCaller.terreiros.consignmentRequests.cancel({ id: 1 })).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG });
+  });
+});
+
 // ─── Solicitações de Parceria (página "Parceria com a Toca") ──────────────────
 
 describe("partnerApplications", () => {

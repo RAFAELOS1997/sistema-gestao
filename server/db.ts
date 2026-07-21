@@ -10,6 +10,7 @@ import {
   partnerTiers,
   terreiroProductPrices,
   consignments,
+  consignmentRequests, consignmentRequestItems,
   infinitePayCharges, InsertInfinitePayCharge,
   paymentMethods,
   partnerOrders, partnerOrderItems,
@@ -510,6 +511,38 @@ export async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE terreiros ADD COLUMN mustChangePassword int NOT NULL DEFAULT 0`);
   } catch (error: any) {
     if (!isDupColumn(error)) console.error("[migrations] terreiros.mustChangePassword:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS consignmentRequests (
+        id int AUTO_INCREMENT NOT NULL,
+        terreiroId int NOT NULL,
+        status enum('pendente','entregue','cancelado') NOT NULL DEFAULT 'pendente',
+        notes text,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] consignmentRequests:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS consignmentRequestItems (
+        id int AUTO_INCREMENT NOT NULL,
+        consignmentRequestId int NOT NULL,
+        productId int NOT NULL,
+        name varchar(255) NOT NULL,
+        quantity int NOT NULL,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] consignmentRequestItems:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -1501,6 +1534,114 @@ export async function markConsignmentReturned(id: number, quantity: number) {
     .update(products)
     .set({ currentStock: sql`${products.currentStock} + ${quantity}` })
     .where(eq(products.id, consignment.productId));
+}
+
+// ─── Solicitações de Comodato (terreiro pede, admin confirma na entrega) ──────
+
+export async function createConsignmentRequest(
+  terreiroId: number,
+  items: { productId: number; name: string; quantity: number }[],
+  notes?: string | null
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const requestResult = await db.insert(consignmentRequests).values({ terreiroId, notes: notes ?? null, status: "pendente" });
+  const requestId = ((requestResult as any)[0]?.insertId ?? (requestResult as any).insertId) as number;
+  await db.insert(consignmentRequestItems).values(
+    items.map((item) => ({
+      consignmentRequestId: requestId,
+      productId: item.productId,
+      name: item.name,
+      quantity: item.quantity,
+    }))
+  );
+  return { id: requestId };
+}
+
+export async function listConsignmentRequestsForTerreiro(terreiroId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const requests = await db
+    .select()
+    .from(consignmentRequests)
+    .where(eq(consignmentRequests.terreiroId, terreiroId))
+    .orderBy(desc(consignmentRequests.createdAt));
+  const items = await db.select().from(consignmentRequestItems);
+  return requests.map((r) => ({ ...r, items: items.filter((i) => i.consignmentRequestId === r.id) }));
+}
+
+// Visão do admin: só as pendentes (é o que precisa de ação) — usado no card
+// da página de um terreiro específico e pra mostrar a contagem na listagem.
+export async function listPendingConsignmentRequestsForTerreiro(terreiroId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const requests = await db
+    .select()
+    .from(consignmentRequests)
+    .where(and(eq(consignmentRequests.terreiroId, terreiroId), eq(consignmentRequests.status, "pendente")))
+    .orderBy(desc(consignmentRequests.createdAt));
+  const items = await db.select().from(consignmentRequestItems);
+  return requests.map((r) => ({ ...r, items: items.filter((i) => i.consignmentRequestId === r.id) }));
+}
+
+export async function countPendingConsignmentRequestsByTerreiro() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ terreiroId: consignmentRequests.terreiroId, openRequests: sql<number>`COUNT(*)` })
+    .from(consignmentRequests)
+    .where(eq(consignmentRequests.status, "pendente"))
+    .groupBy(consignmentRequests.terreiroId);
+}
+
+export async function cancelConsignmentRequest(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(consignmentRequests).set({ status: "cancelado" }).where(eq(consignmentRequests.id, id));
+}
+
+// Confirma a entrega: cria o comodato de verdade pra cada item (com o preço
+// combinado que o admin define aqui), baixando o estoque na hora — só agora,
+// nunca na hora do pedido. Se algum item não tiver estoque suficiente, para
+// tudo antes de mexer em qualquer coisa (evita ficar pela metade).
+export async function fulfillConsignmentRequest(
+  requestId: number,
+  itemPrices: { itemId: number; unitPrice: number }[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const requestRows = await db.select().from(consignmentRequests).where(eq(consignmentRequests.id, requestId)).limit(1);
+  const request = requestRows[0];
+  if (!request) throw new Error("Solicitação de comodato não encontrada");
+  if (request.status !== "pendente") throw new Error("Essa solicitação já foi processada");
+
+  const items = await db.select().from(consignmentRequestItems).where(eq(consignmentRequestItems.consignmentRequestId, requestId));
+  const priceByItemId = new Map(itemPrices.map((p) => [p.itemId, p.unitPrice]));
+
+  for (const item of items) {
+    const unitPrice = priceByItemId.get(item.id);
+    if (!unitPrice || unitPrice < 1) throw new Error(`Informe o preço combinado de "${item.name}"`);
+    const product = await getProductById(item.productId);
+    if (!product) throw new Error(`Produto "${item.name}" não encontrado`);
+    if (product.currentStock < item.quantity) {
+      throw new Error(`Estoque insuficiente de "${item.name}". Disponível: ${product.currentStock}`);
+    }
+  }
+
+  for (const item of items) {
+    const unitPrice = priceByItemId.get(item.id)!;
+    await createConsignment({
+      terreiroId: request.terreiroId,
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice,
+      notes: request.notes,
+    });
+  }
+
+  await db.update(consignmentRequests).set({ status: "entregue" }).where(eq(consignmentRequests.id, requestId));
+  return { terreiroId: request.terreiroId };
 }
 
 // ─── Pedidos de Parceiros (tela "Gerar Pedidos" do Portal) ────────────────────

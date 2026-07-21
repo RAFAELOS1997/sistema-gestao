@@ -369,6 +369,37 @@ export const consignments = mysqlTable("consignments", {
 export type Consignment = typeof consignments.$inferSelect;
 export type InsertConsignment = typeof consignments.$inferInsert;
 
+// ─── Solicitações de Comodato (o terreiro pede, o admin confirma na entrega) ──
+// O terreiro escolhe itens do ESTOQUE DA LOJA (não do fornecedor) e pede pra
+// Rafael entregar em comodato. Isso NÃO baixa estoque nem cria o comodato de
+// verdade — só quando o admin confirma a entrega (define o preço combinado
+// de cada item ali) é que vira um registro em `consignments` de verdade,
+// com a baixa de estoque na hora certa.
+
+export const consignmentRequests = mysqlTable("consignmentRequests", {
+  id: int("id").autoincrement().primaryKey(),
+  terreiroId: int("terreiroId").notNull(),
+  status: mysqlEnum("status", ["pendente", "entregue", "cancelado"]).notNull().default("pendente"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ConsignmentRequest = typeof consignmentRequests.$inferSelect;
+export type InsertConsignmentRequest = typeof consignmentRequests.$inferInsert;
+
+export const consignmentRequestItems = mysqlTable("consignmentRequestItems", {
+  id: int("id").autoincrement().primaryKey(),
+  consignmentRequestId: int("consignmentRequestId").notNull(),
+  productId: int("productId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(), // snapshot — produto pode mudar depois
+  quantity: int("quantity").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ConsignmentRequestItem = typeof consignmentRequestItems.$inferSelect;
+export type InsertConsignmentRequestItem = typeof consignmentRequestItems.$inferInsert;
+
 // ─── Pedidos de Parceiros (tela "Gerar Pedidos" do Portal) ────────────────────
 // O terreiro monta o pedido escolhendo itens do catálogo do fornecedor (sem
 // nunca ver quem é o fornecedor ou o link do site dele) já com o preço do

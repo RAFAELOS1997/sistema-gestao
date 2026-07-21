@@ -25,6 +25,7 @@ export default function Partners() {
   const { data: terreiros = [], isLoading } = trpc.terreiros.list.useQuery({ includeInactive: true });
   const { data: tiers = [] } = trpc.partnerTiers.list.useQuery();
   const { data: openConsignments = [] } = trpc.terreiros.consignments.openCountByTerreiro.useQuery();
+  const { data: pendingConsignmentRequests = [] } = trpc.terreiros.consignmentRequests.pendingCountByTerreiro.useQuery();
   const { data: spendingTotals = [] } = trpc.terreiros.spendingTotals.useQuery();
   const { data: applications = [] } = trpc.partnerApplications.list.useQuery();
   const pendingApplications = applications.filter((a: any) => a.status === "pendente");
@@ -38,6 +39,8 @@ export default function Partners() {
   const tierName = (tierId: number | null) => tiers.find((t) => t.id === tierId)?.name ?? null;
   const openItemsOf = (terreiroId: number) =>
     Number(openConsignments.find((c) => c.terreiroId === terreiroId)?.openItems ?? 0);
+  const pendingRequestsOf = (terreiroId: number) =>
+    Number(pendingConsignmentRequests.find((c: any) => c.terreiroId === terreiroId)?.openRequests ?? 0);
   const spentBy = (terreiroId: number) =>
     Number(spendingTotals.find((s: any) => s.terreiroId === terreiroId)?.totalSpent ?? 0);
 
@@ -337,6 +340,11 @@ export default function Partners() {
                         {openItemsOf(t.id)} item(ns) em comodato
                       </span>
                     )}
+                    {pendingRequestsOf(t.id) > 0 && (
+                      <span className="px-2 py-1 rounded text-xs bg-accent/20 text-accent border border-accent/30">
+                        {pendingRequestsOf(t.id)} solicitação(ões) de comodato
+                      </span>
+                    )}
                   </div>
                   <p className="text-xs text-foreground">
                     Total gasto: <span className="font-semibold text-accent">R$ {(spentBy(t.id) / 100).toFixed(2)}</span>
@@ -415,13 +423,21 @@ export default function Partners() {
                       {t.phone ? ` · ${t.phone}` : ""}
                     </TableCell>
                     <TableCell>
-                      {openItemsOf(t.id) > 0 ? (
-                        <span className="px-2 py-1 rounded text-sm bg-amber-900/30 text-amber-200">
-                          {openItemsOf(t.id)} item(ns)
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                      <div className="flex flex-col gap-1 items-start">
+                        {openItemsOf(t.id) > 0 && (
+                          <span className="px-2 py-1 rounded text-sm bg-amber-900/30 text-amber-200">
+                            {openItemsOf(t.id)} item(ns)
+                          </span>
+                        )}
+                        {pendingRequestsOf(t.id) > 0 && (
+                          <span className="px-2 py-1 rounded text-xs bg-accent/20 text-accent border border-accent/30">
+                            {pendingRequestsOf(t.id)} pedido(s) pendente(s)
+                          </span>
+                        )}
+                        {openItemsOf(t.id) === 0 && pendingRequestsOf(t.id) === 0 && (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {t.lastSignedIn
