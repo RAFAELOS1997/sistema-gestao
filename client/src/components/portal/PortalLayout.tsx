@@ -23,13 +23,18 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="min-h-screen bg-background">
+      <div className="h-1 bg-gradient-to-r from-accent/20 via-accent to-accent/20" />
       <header className="border-b border-border bg-card sticky top-0 z-40">
-        <div className="flex items-center justify-between gap-2 px-3 sm:px-6 h-14 sm:h-16 max-w-6xl mx-auto">
-          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <img src="/logo.jpeg" alt="Toca da Pantera" className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg object-cover shrink-0" />
+        <div className="flex items-center justify-between gap-2 px-3 sm:px-6 h-16 sm:h-[4.5rem] max-w-6xl mx-auto">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <img
+              src="/logo.jpeg"
+              alt="Toca da Pantera"
+              className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl object-cover shrink-0 ring-2 ring-accent/30 shadow-md shadow-accent/10"
+            />
             <div className="min-w-0">
-              <p className="font-bold tracking-tight text-accent text-sm leading-none">Portal do Parceiro</p>
-              <p className="text-xs text-muted-foreground truncate mt-1">{terreiro?.name}</p>
+              <p className="font-bold tracking-tight text-accent text-sm sm:text-base leading-none">Portal do Parceiro</p>
+              <p className="text-xs text-muted-foreground truncate mt-1.5">{terreiro?.name}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
@@ -50,10 +55,10 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             <button
               key={item.path}
               onClick={() => setLocation(item.path)}
-              className={`flex-1 sm:flex-none text-center px-3 py-3 sm:py-2 text-sm border-b-2 transition-colors ${
+              className={`flex-1 sm:flex-none text-center px-3 py-3 sm:py-2.5 text-sm border-b-2 transition-colors ${
                 location === item.path
-                  ? "border-accent text-accent font-medium"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
+                  ? "border-accent text-accent font-semibold"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-accent/5"
               }`}
             >
               {item.label}

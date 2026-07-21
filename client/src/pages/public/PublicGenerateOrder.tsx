@@ -8,22 +8,9 @@ import { trpc } from "@/lib/trpc";
 import { Search, Plus, Minus, ChevronDown, ChevronUp, ShoppingCart, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { usePublicCart } from "@/contexts/PublicCartContext";
+import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
 
 type Source = "catalogo" | "estoque";
-
-const CATEGORY_LABELS: Record<string, string> = {
-  guias: "Guias",
-  pulseiras: "Pulseiras",
-  velas: "Velas",
-  incensos: "Incensos",
-  ervas: "Ervas",
-  imagens: "Imagens",
-  ferramentas: "Ferramentas",
-  vestuario: "Vestuário",
-  livros: "Livros",
-  pedras: "Pedras",
-  outros: "Outros",
-};
 
 const cartKey = (source: Source, id: number) => `${source}:${id}`;
 
@@ -172,17 +159,21 @@ export default function PublicGenerateOrder() {
           >
             Todas
           </button>
-          {categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className={`px-3 py-2 rounded-lg text-sm whitespace-nowrap border transition-colors shrink-0 ${
-                category === cat ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:bg-accent/10"
-              }`}
-            >
-              {CATEGORY_LABELS[cat] ?? cat}
-            </button>
-          ))}
+          {categories.map((cat) => {
+            const Icon = categoryIcon(cat);
+            return (
+              <button
+                key={cat}
+                onClick={() => setCategory(cat)}
+                className={`px-3 py-2 rounded-lg text-sm whitespace-nowrap border transition-colors shrink-0 flex items-center gap-1.5 ${
+                  category === cat ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:bg-accent/10"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                {CATEGORY_LABELS[cat] ?? cat}
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -194,13 +185,17 @@ export default function PublicGenerateOrder() {
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {filtered.map((item) => {
             const qty = cart[cartKey(source, item.id)]?.quantity ?? 0;
+            const CategoryIcon = categoryIcon(item.category);
             return (
-              <div key={item.id} className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
+              <div
+                key={item.id}
+                className="bg-card border border-border rounded-xl overflow-hidden flex flex-col transition-all hover:shadow-lg hover:shadow-accent/10 hover:border-accent/40 hover:-translate-y-0.5"
+              >
                 <div className="aspect-square bg-background flex items-center justify-center text-muted-foreground text-xs overflow-hidden">
                   {item.imageUrl ? (
                     <ZoomableImage src={item.imageUrl} alt={item.name} className="w-full h-full" />
                   ) : (
-                    <span className="px-2 text-center">{(CATEGORY_LABELS[item.category] ?? item.category).toUpperCase()}</span>
+                    <CategoryIcon className="w-8 h-8 text-accent/40" />
                   )}
                 </div>
                 <div className="p-2.5 sm:p-3 flex flex-col flex-1">

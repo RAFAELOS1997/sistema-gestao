@@ -1,4 +1,5 @@
 import { useLocation } from "wouter";
+import { DecorativeDivider } from "@/components/DecorativeDivider";
 
 const NAV_ITEMS = [
   { label: "Pronta Entrega", path: "/loja/produtos" },
@@ -46,8 +47,19 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
             ))}
           </nav>
         </div>
+        <div className="relative max-w-xs mx-auto pb-4 sm:pb-5">
+          <DecorativeDivider />
+        </div>
       </header>
       <main className="max-w-6xl mx-auto p-3 sm:p-6">{children}</main>
+      <footer className="border-t border-border mt-8">
+        <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col items-center gap-3 text-center">
+          <DecorativeDivider className="max-w-xs" />
+          <p className="text-sm text-muted-foreground">
+            Toca da Pantera — artigos umbandistas e religiosos
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
