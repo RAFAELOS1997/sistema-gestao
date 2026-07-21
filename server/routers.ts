@@ -1885,22 +1885,29 @@ const publicStoreRouter = router({
 
         const order = await createPublicOrder(input.customerName, input.customerPhone, orderItems, "infinitepay");
 
-        const orderNsu = randomUUID();
-        const { url } = await createPaymentLink({
-          handle,
-          orderNsu,
-          items: orderItems.map((i) => ({ quantity: i.quantity, price: i.unitPrice, description: i.name })),
-          webhookUrl: `${PUBLIC_BASE_URL}/api/webhooks/infinitepay`,
-        });
-        await createInfinitePayCharge({
-          orderNsu,
-          amountCents: subtotal,
-          description: `Pedido site #${order.id}`,
-          checkoutUrl: url,
-          publicOrderId: order.id,
-        });
-
-        return { orderNsu, checkoutUrl: url, orderId: order.id, subtotal };
+        // Se a InfinitePay falhar aqui, o pedido já foi gravado — cancela
+        // pra não ficar "pendente" pra sempre sem cobrança nenhuma vinculada
+        // (senão fica um lixo confuso em "Pedidos do Site").
+        try {
+          const orderNsu = randomUUID();
+          const { url } = await createPaymentLink({
+            handle,
+            orderNsu,
+            items: orderItems.map((i) => ({ quantity: i.quantity, price: i.unitPrice, description: i.name })),
+            webhookUrl: `${PUBLIC_BASE_URL}/api/webhooks/infinitepay`,
+          });
+          await createInfinitePayCharge({
+            orderNsu,
+            amountCents: subtotal,
+            description: `Pedido site #${order.id}`,
+            checkoutUrl: url,
+            publicOrderId: order.id,
+          });
+          return { orderNsu, checkoutUrl: url, orderId: order.id, subtotal };
+        } catch (error) {
+          await updatePublicOrderStatus(order.id, "cancelado");
+          throw error;
+        }
       }),
 
     // Mesma lógica de checkChargeStatus (staff): sempre reconfere direto na

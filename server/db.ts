@@ -1571,9 +1571,12 @@ export async function fulfillPublicOrderForCharge(orderNsu: string) {
       channel: "site",
       saleDate: new Date(),
     });
+    // GREATEST(...,0): dois clientes podem pagar a última unidade quase ao
+    // mesmo tempo (o estoque só é reservado na confirmação do pagamento, não
+    // na hora de gerar a cobrança) — trava em 0 pra nunca ficar negativo.
     await db
       .update(products)
-      .set({ currentStock: sql`${products.currentStock} - ${item.quantity}` })
+      .set({ currentStock: sql`GREATEST(${products.currentStock} - ${item.quantity}, 0)` })
       .where(eq(products.id, item.productId));
   }
 

@@ -35,6 +35,7 @@ export default function PublicCatalogProducts() {
   const [charge, setCharge] = useState<{ orderNsu: string; checkoutUrl: string } | null>(null);
   const [paid, setPaid] = useState(false);
 
+  const utils = trpc.useUtils();
   const productsQuery = trpc.publicStore.products.list.useQuery();
   const products = productsQuery.data ?? [];
 
@@ -53,6 +54,10 @@ export default function PublicCatalogProducts() {
       setPaid(true);
       clearCart();
       setCartExpanded(false);
+      // Estoque acabou de baixar de verdade no servidor — atualiza os
+      // números na tela pra não mostrar quantidade desatualizada.
+      utils.publicStore.products.list.invalidate();
+      utils.publicStore.orderCatalog.stock.invalidate();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusQuery.data?.status]);
