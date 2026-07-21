@@ -193,7 +193,7 @@ export default function PublicGenerateOrder() {
             return (
               <div
                 key={item.id}
-                className="bg-card border border-border rounded-xl overflow-hidden flex flex-col transition-all hover:shadow-lg hover:shadow-accent/10 hover:border-accent/40 hover:-translate-y-0.5"
+                className="bg-card border border-border rounded-xl overflow-hidden flex flex-col transition-all hover:shadow-lg hover:shadow-[#c9a961]/15 hover:border-[#c9a961]/40 hover:-translate-y-0.5"
               >
                 <div className="aspect-square bg-background flex items-center justify-center text-muted-foreground text-xs overflow-hidden">
                   {item.imageUrl ? (

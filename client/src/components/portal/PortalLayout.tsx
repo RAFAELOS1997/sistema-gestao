@@ -23,23 +23,23 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="h-1 bg-gradient-to-r from-accent/20 via-accent to-accent/20" />
-      <header className="border-b border-border bg-card sticky top-0 z-40">
+      <div className="h-1 bg-gradient-to-r from-[#c9a961]/20 via-[#c9a961] to-[#c9a961]/20" />
+      <header className="border-b border-[#c9a961]/15 bg-card sticky top-0 z-40">
         <div className="flex items-center justify-between gap-2 px-3 sm:px-6 h-16 sm:h-[4.5rem] max-w-6xl mx-auto">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
             <img
               src="/logo.jpeg"
               alt="Toca da Pantera"
-              className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl object-cover shrink-0 ring-2 ring-accent/30 shadow-md shadow-accent/10"
+              className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl object-cover shrink-0 ring-2 ring-[#c9a961]/40 shadow-md shadow-[#c9a961]/10"
             />
             <div className="min-w-0">
-              <p className="font-bold tracking-tight text-accent text-sm sm:text-base leading-none">Portal do Parceiro</p>
+              <p className="font-bold tracking-tight text-[#c9a961] text-sm sm:text-base leading-none">Portal do Parceiro</p>
               <p className="text-xs text-muted-foreground truncate mt-1.5">{terreiro?.name}</p>
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {terreiro?.tierName && (
-              <span className="px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium bg-accent/20 text-accent border border-accent/30 whitespace-nowrap">
+              <span className="px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium bg-[#c9a961]/15 text-[#c9a961] border border-[#c9a961]/30 whitespace-nowrap">
                 <span className="hidden sm:inline">Plano </span>
                 {terreiro.tierName}
               </span>

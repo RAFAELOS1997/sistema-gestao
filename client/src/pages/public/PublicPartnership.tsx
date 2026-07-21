@@ -88,13 +88,13 @@ export default function PublicPartnership() {
     <div className="space-y-12 sm:space-y-16 pb-8">
       {/* Hero da página */}
       <div className="text-center space-y-5 pt-2">
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-xs font-semibold">
+        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#c9a961]/10 border border-[#c9a961]/30 text-[#c9a961] text-xs font-semibold">
           <Handshake className="w-3.5 h-3.5" />
           Programa de Parceria — vagas abertas agora
         </div>
         <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground max-w-2xl mx-auto">
           Todo mês que seu terreiro compra sem parceria, é dinheiro que{" "}
-          <span className="text-accent">fica na mesa</span>
+          <span className="text-[#c9a961]">fica na mesa</span>
         </h1>
         <p className="text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
           Terreiro parceiro paga até <strong className="text-foreground">22% mais barato</strong> em guias, velas,
