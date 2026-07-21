@@ -123,6 +123,10 @@ export default function PublicGenerateOrder() {
         </p>
       </div>
 
+      <p className="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+        Por enquanto entregamos só em Ribeirão Preto e região — em breve, pra todo o Brasil!
+      </p>
+
       <div className="flex gap-2 border-b border-border">
         {([
           { key: "catalogo" as const, label: "Catálogo do Fornecedor" },

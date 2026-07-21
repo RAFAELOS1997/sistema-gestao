@@ -104,6 +104,10 @@ export default function PublicCatalogProducts() {
         </p>
       </div>
 
+      <p className="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
+        Por enquanto entregamos só em Ribeirão Preto e região — em breve, pra todo o Brasil!
+      </p>
+
       <div className="flex flex-col gap-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

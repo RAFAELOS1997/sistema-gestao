@@ -1,5 +1,7 @@
 import { useLocation } from "wouter";
 import { DecorativeDivider } from "@/components/DecorativeDivider";
+import { MessageCircle } from "lucide-react";
+import { WHATSAPP_LINK } from "@/lib/contact";
 
 const NAV_ITEMS = [
   { label: "Pronta Entrega", path: "/loja/produtos" },
@@ -57,6 +59,18 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
           <DecorativeDivider className="max-w-xs" />
           <p className="text-sm text-muted-foreground">
             Toca da Pantera — artigos umbandistas e religiosos
+          </p>
+          <a
+            href={WHATSAPP_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+          >
+            <MessageCircle className="w-4 h-4" />
+            Fale com a gente pelo WhatsApp
+          </a>
+          <p className="text-xs text-muted-foreground max-w-md">
+            Por enquanto entregamos só em Ribeirão Preto e região. Em breve vamos atender o Brasil todo!
           </p>
         </div>
       </footer>
