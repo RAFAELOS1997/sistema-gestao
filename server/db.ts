@@ -12,6 +12,7 @@ import {
   infinitePayCharges, InsertInfinitePayCharge,
   paymentMethods,
   partnerOrders, partnerOrderItems,
+  publicOrders, publicOrderItems,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -372,6 +373,44 @@ export async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE partnerOrderItems ADD COLUMN source enum('catalogo','estoque') NOT NULL DEFAULT 'catalogo'`);
   } catch (error: any) {
     if (!isDupColumn(error)) console.error("[migrations] partnerOrderItems.source:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS publicOrders (
+        id int AUTO_INCREMENT NOT NULL,
+        customerName varchar(255) NOT NULL,
+        customerPhone varchar(20) NOT NULL,
+        subtotal int NOT NULL,
+        status enum('pendente','confirmado','entregue','cancelado') NOT NULL DEFAULT 'pendente',
+        notes text,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] publicOrders:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS publicOrderItems (
+        id int AUTO_INCREMENT NOT NULL,
+        publicOrderId int NOT NULL,
+        source enum('catalogo','estoque') NOT NULL DEFAULT 'catalogo',
+        supplierCatalogId int,
+        productId int,
+        name varchar(255) NOT NULL,
+        quantity int NOT NULL,
+        unitPrice int NOT NULL,
+        totalPrice int NOT NULL,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] publicOrderItems:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -1408,6 +1447,79 @@ export async function updatePartnerOrderStatus(id: number, status: "pendente" | 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(partnerOrders).set({ status }).where(eq(partnerOrders.id, id));
+}
+
+// ─── Catálogo Público (loja online, sem login) ─────────────────────────────────
+
+// Produtos do estoque a preço cheio (sem desconto de plano) — inclui
+// costPrice só pra trava de comissão mínima no cálculo do pedido, nunca
+// devolvido pro visitante.
+export async function listActiveProductsFullPrice() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: products.id,
+      name: products.name,
+      category: products.category,
+      imageUrl: products.imageUrl,
+      salePrice: products.salePrice,
+      costPrice: products.costPrice,
+      currentStock: products.currentStock,
+    })
+    .from(products)
+    .where(and(eq(products.isActive, 1), gte(products.currentStock, 1)))
+    .orderBy(products.name);
+}
+
+export async function createPublicOrder(
+  customerName: string,
+  customerPhone: string,
+  items: {
+    source: "catalogo" | "estoque";
+    supplierCatalogId?: number;
+    productId?: number;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+  }[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const orderResult = await db.insert(publicOrders).values({ customerName, customerPhone, subtotal, status: "pendente" });
+  const orderId = ((orderResult as any)[0]?.insertId ?? (orderResult as any).insertId) as number;
+  await db.insert(publicOrderItems).values(
+    items.map((item) => ({
+      publicOrderId: orderId,
+      source: item.source,
+      supplierCatalogId: item.supplierCatalogId ?? null,
+      productId: item.productId ?? null,
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+    }))
+  );
+  return { id: orderId, subtotal };
+}
+
+export async function listAllPublicOrders() {
+  const db = await getDb();
+  if (!db) return [];
+  const orders = await db.select().from(publicOrders).orderBy(desc(publicOrders.createdAt));
+  const items = await db.select().from(publicOrderItems);
+  return orders.map((order) => ({
+    ...order,
+    items: items.filter((i) => i.publicOrderId === order.id),
+  }));
+}
+
+export async function updatePublicOrderStatus(id: number, status: "pendente" | "confirmado" | "entregue" | "cancelado") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(publicOrders).set({ status }).where(eq(publicOrders.id, id));
 }
 
 // ─── Cobranças InfinitePay ─────────────────────────────────────────────────────

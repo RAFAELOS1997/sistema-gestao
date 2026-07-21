@@ -382,3 +382,38 @@ export const partnerOrderItems = mysqlTable("partnerOrderItems", {
 
 export type PartnerOrderItem = typeof partnerOrderItems.$inferSelect;
 export type InsertPartnerOrderItem = typeof partnerOrderItems.$inferInsert;
+
+// ─── Catálogo Público (loja online, sem login) ────────────────────────────────
+// Página pública equivalente ao Portal do Parceiro, mas com preço cheio (sem
+// desconto de plano) e 5% a mais na aba de pedidos. Sem conta/login — o
+// cliente só informa nome e telefone pra Rafael poder retornar o contato.
+
+export const publicOrders = mysqlTable("publicOrders", {
+  id: int("id").autoincrement().primaryKey(),
+  customerName: varchar("customerName", { length: 255 }).notNull(),
+  customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
+  subtotal: int("subtotal").notNull(), // em centavos
+  status: mysqlEnum("status", ["pendente", "confirmado", "entregue", "cancelado"]).notNull().default("pendente"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PublicOrder = typeof publicOrders.$inferSelect;
+export type InsertPublicOrder = typeof publicOrders.$inferInsert;
+
+export const publicOrderItems = mysqlTable("publicOrderItems", {
+  id: int("id").autoincrement().primaryKey(),
+  publicOrderId: int("publicOrderId").notNull(),
+  source: mysqlEnum("source", ["catalogo", "estoque"]).notNull().default("catalogo"),
+  supplierCatalogId: int("supplierCatalogId"),
+  productId: int("productId"),
+  name: varchar("name", { length: 255 }).notNull(),
+  quantity: int("quantity").notNull(),
+  unitPrice: int("unitPrice").notNull(), // em centavos, preço cheio + 5%
+  totalPrice: int("totalPrice").notNull(), // em centavos
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PublicOrderItem = typeof publicOrderItems.$inferSelect;
+export type InsertPublicOrderItem = typeof publicOrderItems.$inferInsert;

@@ -1,0 +1,114 @@
+import { useMemo, useState } from "react";
+import { Input } from "@/components/ui/input";
+import { ZoomableImage } from "@/components/ZoomableImage";
+import { trpc } from "@/lib/trpc";
+import { Search } from "lucide-react";
+
+const CATEGORY_LABELS: Record<string, string> = {
+  guias: "Guias",
+  pulseiras: "Pulseiras",
+  velas: "Velas",
+  incensos: "Incensos",
+  ervas: "Ervas",
+  imagens: "Imagens",
+  ferramentas: "Ferramentas",
+  vestuario: "Vestuário",
+  livros: "Livros",
+  pedras: "Pedras",
+  outros: "Outros",
+};
+
+export default function PublicCatalogProducts() {
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState("todas");
+
+  const productsQuery = trpc.publicStore.products.list.useQuery();
+  const products = productsQuery.data ?? [];
+
+  const categories = useMemo(() => Array.from(new Set(products.map((p) => p.category))), [products]);
+
+  const filtered = useMemo(() => {
+    return products.filter((p) => {
+      const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
+      const matchesCategory = category === "todas" || p.category === category;
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, search, category]);
+
+  return (
+    <div className="space-y-5 sm:space-y-6">
+      <div>
+        <h1 className="text-xl sm:text-3xl font-bold text-foreground">Nossos Produtos</h1>
+        <p className="text-muted-foreground text-sm">
+          Confira o que está disponível
+          {!productsQuery.isLoading && products.length > 0 && (
+            <span> — {filtered.length === products.length ? `${products.length} produto(s)` : `${filtered.length} de ${products.length} produto(s)`}</span>
+          )}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar produto..."
+            className="pl-9 h-10 text-base"
+          />
+        </div>
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-3 px-3 sm:mx-0 sm:px-0">
+          <button
+            onClick={() => setCategory("todas")}
+            className={`px-3 py-2 rounded-lg text-sm whitespace-nowrap border transition-colors shrink-0 ${
+              category === "todas" ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:bg-accent/10"
+            }`}
+          >
+            Todas
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setCategory(cat)}
+              className={`px-3 py-2 rounded-lg text-sm whitespace-nowrap border transition-colors shrink-0 ${
+                category === cat ? "bg-accent text-accent-foreground border-accent" : "border-border text-muted-foreground hover:bg-accent/10"
+              }`}
+            >
+              {CATEGORY_LABELS[cat] ?? cat}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {productsQuery.isLoading ? (
+        <div className="text-center py-10 text-muted-foreground text-sm">Carregando produtos...</div>
+      ) : products.length === 0 ? (
+        <div className="text-center py-12 px-4 text-muted-foreground text-sm max-w-md mx-auto">
+          Nenhum produto disponível no momento.
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-10 text-muted-foreground text-sm">Nenhum produto encontrado</div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          {filtered.map((product) => (
+            <div key={product.id} className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
+              <div className="aspect-square bg-background flex items-center justify-center text-muted-foreground text-xs overflow-hidden">
+                {product.imageUrl ? (
+                  <ZoomableImage src={product.imageUrl} alt={product.name} className="w-full h-full" />
+                ) : (
+                  <span className="px-2 text-center">{(CATEGORY_LABELS[product.category] ?? product.category).toUpperCase()}</span>
+                )}
+              </div>
+              <div className="p-2.5 sm:p-3 flex flex-col flex-1">
+                <h3 className="font-semibold text-xs sm:text-sm text-foreground leading-snug line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] break-words">
+                  {product.name}
+                </h3>
+                <p className="text-base sm:text-lg font-bold mt-1 text-accent">R$ {(product.price / 100).toFixed(2)}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

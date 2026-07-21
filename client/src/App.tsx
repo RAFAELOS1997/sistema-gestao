@@ -17,6 +17,10 @@ import PortalLogin from "./pages/portal/PortalLogin";
 import PortalProducts from "./pages/portal/PortalProducts";
 import PortalGenerateOrder from "./pages/portal/PortalGenerateOrder";
 import PartnerOrders from "./pages/PartnerOrders";
+import PublicCatalogLayout from "./components/public/PublicCatalogLayout";
+import PublicCatalogProducts from "./pages/public/PublicCatalogProducts";
+import PublicGenerateOrder from "./pages/public/PublicGenerateOrder";
+import PublicOrders from "./pages/PublicOrders";
 import PriceReview from "./pages/PriceReview";
 import SupplierCatalog from "./pages/SupplierCatalog";
 import AuditPedido7335 from "./pages/AuditPedido7335";
@@ -119,6 +123,24 @@ function Router() {
         <DashboardLayout>
           <PartnerOrders />
         </DashboardLayout>
+      </Route>
+      <Route path="/pedidos-site">
+        <DashboardLayout>
+          <PublicOrders />
+        </DashboardLayout>
+      </Route>
+
+      {/* Catálogo Público — sem login, aberto pra qualquer visitante */}
+      <Route path="/loja" component={() => <Redirect to="/loja/produtos" />} />
+      <Route path="/loja/produtos">
+        <PublicCatalogLayout>
+          <PublicCatalogProducts />
+        </PublicCatalogLayout>
+      </Route>
+      <Route path="/loja/pedidos">
+        <PublicCatalogLayout>
+          <PublicGenerateOrder />
+        </PublicCatalogLayout>
       </Route>
 
       {/* Portal do Parceiro — login e área separados dos usuários do sistema */}

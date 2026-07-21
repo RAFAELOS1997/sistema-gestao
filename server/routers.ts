@@ -93,6 +93,10 @@ import {
   listPartnerOrdersForTerreiro,
   listAllPartnerOrders,
   updatePartnerOrderStatus,
+  listActiveProductsFullPrice,
+  createPublicOrder,
+  listAllPublicOrders,
+  updatePublicOrderStatus,
 } from "./db";
 
 // O hash de senha (scrypt) nunca deve sair do servidor — sem isso, auth.me e
@@ -1177,15 +1181,26 @@ const suggestSalePrice = (costCents: number) => {
 // preço de venda sugerido, aplica o desconto do plano dele e trava num
 // mínimo de custo×1,5 — comissão nunca pode ficar abaixo de 50%, mesmo que
 // o desconto do plano (até 20% no Diamante) empurraria o preço mais baixo.
-const MIN_PARTNER_ORDER_MARGIN_MULT = 1.5;
+const MIN_ORDER_MARGIN_MULT = 1.5;
 const computePartnerOrderItemPrice = (costCents: number, suggestedSalePriceCents: number | null, discountPercent: number) => {
   const baseSalePrice = suggestedSalePriceCents ?? suggestSalePrice(costCents);
   const tierPrice = Math.round(baseSalePrice * (1 - discountPercent / 100));
-  const minPrice = Math.ceil(costCents * MIN_PARTNER_ORDER_MARGIN_MULT);
+  const minPrice = Math.ceil(costCents * MIN_ORDER_MARGIN_MULT);
   return Math.max(tierPrice, minPrice);
 };
 
 const PARTNER_ORDER_MINIMUM_CENTS = 15000; // R$ 150 (a compra mínima do fornecedor pra loja é R$ 300)
+
+// Preço da aba "Fazer Pedidos" do catálogo público: preço cheio + 5% (sem
+// desconto nenhum, é o visitante comum, não um parceiro) — ainda travado no
+// mínimo de custo×1,5 por segurança, embora o preço cheio já costume ficar
+// bem acima disso.
+const PUBLIC_ORDER_MARKUP_MULT = 1.05;
+const computePublicOrderItemPrice = (costCents: number, fullPriceCents: number) => {
+  const markedUpPrice = Math.round(fullPriceCents * PUBLIC_ORDER_MARKUP_MULT);
+  const minPrice = Math.ceil(costCents * MIN_ORDER_MARGIN_MULT);
+  return Math.max(markedUpPrice, minPrice);
+};
 
 const supplierCatalogRouter = router({
   list: protectedProcedure
@@ -1799,6 +1814,137 @@ const portalRouter = router({
   }),
 });
 
+// ─── Catálogo Público (loja online, sem login) ─────────────────────────────────
+// Página pública equivalente ao Portal do Parceiro, mas sem sessão nenhuma —
+// preço cheio (sem desconto de plano) na aba Produtos, e preço cheio + 5% na
+// aba Fazer Pedidos. Nunca revela quem é o fornecedor, igual ao portal.
+
+const publicStoreRouter = router({
+  // Aba "Produtos": só o estoque da loja, preço cheio, pra qualquer visitante ver.
+  products: router({
+    list: publicProcedure.query(async () => {
+      const items = await listActiveProductsFullPrice();
+      return items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        imageUrl: item.imageUrl,
+        currentStock: item.currentStock,
+        price: item.salePrice,
+      }));
+    }),
+  }),
+
+  // Aba "Fazer Pedidos": catálogo do fornecedor (nunca revela quem é) +
+  // estoque da loja, ambos a preço cheio + 5%.
+  orderCatalog: router({
+    catalog: publicProcedure.query(async () => {
+      const items = await listAvailableSupplierCatalogForOrders();
+      return items.map((item) => {
+        const fullPrice = item.suggestedSalePrice ?? suggestSalePrice(item.price);
+        return {
+          id: item.id,
+          name: item.name,
+          category: item.category,
+          imageUrl: item.imageUrl ? `/api/catalog-image/${item.id}` : null,
+          price: computePublicOrderItemPrice(item.price, fullPrice),
+        };
+      });
+    }),
+
+    stock: publicProcedure.query(async () => {
+      const items = await listActiveProductsFullPrice();
+      return items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        imageUrl: item.imageUrl,
+        currentStock: item.currentStock,
+        price: computePublicOrderItemPrice(item.costPrice, item.salePrice),
+      }));
+    }),
+  }),
+
+  orders: router({
+    create: publicProcedure
+      .input(
+        z.object({
+          customerName: z.string().min(1).max(255),
+          customerPhone: z.string().min(8).max(20),
+          items: z
+            .array(
+              z.object({
+                source: z.enum(["catalogo", "estoque"]),
+                id: z.number().int().positive(),
+                quantity: z.number().int().positive(),
+              })
+            )
+            .min(1),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const catalogItems = await listAvailableSupplierCatalogForOrders();
+        const catalogById = new Map(catalogItems.map((i) => [i.id, i]));
+        const stockItems = await listActiveProductsFullPrice();
+        const stockById = new Map(stockItems.map((i) => [i.id, i]));
+
+        const orderItems = input.items.map(({ source, id, quantity }) => {
+          if (source === "catalogo") {
+            const catalogItem = catalogById.get(id);
+            if (!catalogItem) throw new TRPCError({ code: "BAD_REQUEST", message: "Item não encontrado ou indisponível" });
+            const fullPrice = catalogItem.suggestedSalePrice ?? suggestSalePrice(catalogItem.price);
+            const unitPrice = computePublicOrderItemPrice(catalogItem.price, fullPrice);
+            return {
+              source: "catalogo" as const,
+              supplierCatalogId: id,
+              name: catalogItem.name,
+              quantity,
+              unitPrice,
+              totalPrice: unitPrice * quantity,
+            };
+          }
+          const stockItem = stockById.get(id);
+          if (!stockItem) throw new TRPCError({ code: "BAD_REQUEST", message: "Produto não encontrado ou sem estoque" });
+          if (quantity > stockItem.currentStock) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: `Só há ${stockItem.currentStock} unidade(s) de "${stockItem.name}" em estoque` });
+          }
+          const unitPrice = computePublicOrderItemPrice(stockItem.costPrice, stockItem.salePrice);
+          return {
+            source: "estoque" as const,
+            productId: id,
+            name: stockItem.name,
+            quantity,
+            unitPrice,
+            totalPrice: unitPrice * quantity,
+          };
+        });
+
+        const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+        const order = await createPublicOrder(input.customerName, input.customerPhone, orderItems);
+        return { success: true, orderId: order.id, subtotal };
+      }),
+  }),
+});
+
+// ─── Pedidos do Catálogo Público (visão do admin) ──────────────────────────────
+
+const publicOrdersRouter = router({
+  list: protectedProcedure.query(() => listAllPublicOrders()),
+
+  updateStatus: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), status: z.enum(["pendente", "confirmado", "entregue", "cancelado"]) }))
+    .mutation(async ({ input, ctx }) => {
+      await updatePublicOrderStatus(input.id, input.status);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "public_order_status_updated",
+        module: "public_store",
+        description: `Pedido do site ID ${input.id} marcado como "${input.status}"`,
+      });
+      return { success: true };
+    }),
+});
+
 // ─── Planos de Parceria (Cobre/Bronze/Prata/Ouro/Diamante) ────────────────────
 // 5 planos fixos, cada um com um percentual de desconto fixo sobre o preço de
 // venda da loja. O preço do terreiro é sempre calculado na hora a partir
@@ -1925,6 +2071,8 @@ export const appRouter = router({
   portal: portalRouter,
   partnerTiers: partnerTiersRouter,
   partnerOrders: partnerOrdersRouter,
+  publicStore: publicStoreRouter,
+  publicOrders: publicOrdersRouter,
   infinitePay: infinitePayRouter,
   paymentMethods: paymentMethodsRouter,
 });
