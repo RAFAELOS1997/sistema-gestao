@@ -7,6 +7,7 @@ function createPublicContext(): TrpcContext {
   return {
     user: null,
     terreiro: null,
+    teamUserId: null,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { cookie: () => {}, clearCookie: () => {} } as unknown as TrpcContext["res"],
   };
@@ -25,10 +26,12 @@ function createTerreiroContext(tierId: number | null = 1): TrpcContext {
       logoUrl: null,
       tierId,
       isActive: 1,
+      mustChangePassword: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: null,
     },
+    teamUserId: null,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { cookie: () => {}, clearCookie: () => {} } as unknown as TrpcContext["res"],
   };
@@ -49,6 +52,7 @@ function createStaffContext(): TrpcContext {
       lastSignedIn: new Date(),
     },
     terreiro: null,
+    teamUserId: null,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { cookie: () => {}, clearCookie: () => {} } as unknown as TrpcContext["res"],
   };

@@ -2,6 +2,7 @@ import { usePartnerAuth } from "@/_core/hooks/usePartnerAuth";
 import { Button } from "@/components/ui/button";
 import { LogOut } from "lucide-react";
 import { useLocation } from "wouter";
+import { ForcePasswordChangeDialog } from "./ForcePasswordChangeDialog";
 
 const NAV_ITEMS = [
   { label: "Produtos", path: "/parceiros/produtos" },
@@ -75,6 +76,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
         </nav>
       </header>
       <main className="max-w-6xl mx-auto p-3 sm:p-6">{children}</main>
+      <ForcePasswordChangeDialog open={!!terreiro?.mustChangePassword} loggedInAsName={terreiro?.loggedInAsName ?? undefined} />
     </div>
   );
 }

@@ -488,6 +488,7 @@ export async function runStartupMigrations() {
         username varchar(100) NOT NULL,
         passwordHash varchar(255) NOT NULL,
         isActive int NOT NULL DEFAULT 1,
+        mustChangePassword int NOT NULL DEFAULT 1,
         createdAt timestamp NOT NULL DEFAULT (now()),
         updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
         lastSignedIn timestamp NULL,
@@ -497,6 +498,18 @@ export async function runStartupMigrations() {
     `);
   } catch (error: any) {
     console.error("[migrations] terreiroUsers:", error);
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE terreiroUsers ADD COLUMN mustChangePassword int NOT NULL DEFAULT 1`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] terreiroUsers.mustChangePassword:", error);
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE terreiros ADD COLUMN mustChangePassword int NOT NULL DEFAULT 0`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] terreiros.mustChangePassword:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -1102,6 +1115,12 @@ export async function setTerreiroUserActive(id: number, terreiroId: number, isAc
     .update(terreiroUsers)
     .set({ isActive: isActive ? 1 : 0 })
     .where(and(eq(terreiroUsers.id, id), eq(terreiroUsers.terreiroId, terreiroId)));
+}
+
+export async function updateTerreiroUserPassword(id: number, passwordHash: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(terreiroUsers).set({ passwordHash, mustChangePassword: 0 }).where(eq(terreiroUsers.id, id));
 }
 
 export async function touchTerreiroUserLastSignedIn(id: number) {

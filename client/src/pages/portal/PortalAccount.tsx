@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Loader2, Upload, X, UserPlus, Users } from "lucide-react";
+import { Loader2, Upload, X, UserPlus, Users, KeyRound } from "lucide-react";
 
 // Mesmo padrão usado no cadastro de produtos: redimensiona no navegador
 // antes de mandar, pra não estourar o limite de tamanho salvo no banco.
@@ -42,6 +42,7 @@ export default function PortalAccount() {
 
   const [form, setForm] = useState({ contactName: "", phone: "" });
   const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
   useEffect(() => {
     if (me) setForm({ contactName: me.contactName ?? "", phone: me.phone ?? "" });
@@ -62,6 +63,14 @@ export default function PortalAccount() {
     },
     onError: (error) => toast.error(`Erro: ${error.message}`),
     onSettled: () => setUploadingLogo(false),
+  });
+
+  const changePasswordMutation = trpc.portal.profile.changePassword.useMutation({
+    onSuccess: () => {
+      toast.success("Senha alterada!");
+      setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    },
+    onError: (error) => toast.error(`Erro: ${error.message}`),
   });
 
   const usersQuery = trpc.portal.teamUsers.list.useQuery();
@@ -87,6 +96,19 @@ export default function PortalAccount() {
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
     updateProfileMutation.mutate({ contactName: form.contactName || undefined, phone: form.phone || undefined });
+  };
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordForm.newPassword.length < 6) {
+      toast.error("A nova senha precisa ter pelo menos 6 caracteres");
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error("As senhas não coincidem");
+      return;
+    }
+    changePasswordMutation.mutate({ currentPassword: passwordForm.currentPassword, newPassword: passwordForm.newPassword });
   };
 
   const handleAddUser = (e: React.FormEvent) => {
@@ -197,6 +219,59 @@ export default function PortalAccount() {
             <div className="sm:col-span-2">
               <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90" disabled={updateProfileMutation.isPending}>
                 {updateProfileMutation.isPending ? "Salvando..." : "Salvar dados"}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <KeyRound className="w-5 h-5 text-accent" />
+            Trocar Senha
+          </CardTitle>
+          <CardDescription>Vale pra sua própria senha de acesso a este Portal</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleChangePassword} className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <Label htmlFor="currentPassword" className="text-xs">Senha atual</Label>
+              <Input
+                id="currentPassword"
+                type="password"
+                value={passwordForm.currentPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                className="mt-1 h-9"
+                autoComplete="current-password"
+              />
+            </div>
+            <div>
+              <Label htmlFor="newPassword" className="text-xs">Nova senha</Label>
+              <Input
+                id="newPassword"
+                type="password"
+                value={passwordForm.newPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                className="mt-1 h-9"
+                placeholder="Mínimo 6 caracteres"
+                autoComplete="new-password"
+              />
+            </div>
+            <div>
+              <Label htmlFor="confirmPassword" className="text-xs">Confirme a nova senha</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                value={passwordForm.confirmPassword}
+                onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                className="mt-1 h-9"
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="sm:col-span-3">
+              <Button type="submit" variant="outline" disabled={changePasswordMutation.isPending}>
+                {changePasswordMutation.isPending ? "Salvando..." : "Trocar senha"}
               </Button>
             </div>
           </form>

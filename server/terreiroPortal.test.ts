@@ -9,6 +9,7 @@ function createPublicContext(): TrpcContext {
   return {
     user: null,
     terreiro: null,
+    teamUserId: null,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: {
       cookie: () => {},
@@ -30,10 +31,12 @@ function createTerreiroContext(): TrpcContext {
       logoUrl: null,
       tierId: 1,
       isActive: 1,
+      mustChangePassword: 0,
       createdAt: new Date(),
       updatedAt: new Date(),
       lastSignedIn: null,
     },
+    teamUserId: null,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { cookie: () => {}, clearCookie: () => {} } as unknown as TrpcContext["res"],
   };
@@ -44,8 +47,14 @@ function createTerreiroContext(): TrpcContext {
 describe("terreiroAuth session", () => {
   it("assina e verifica a sessão de um terreiro", async () => {
     const token = await signTerreiroSession(42);
-    const terreiroId = await verifyTerreiroSession(token);
-    expect(terreiroId).toBe(42);
+    const session = await verifyTerreiroSession(token);
+    expect(session).toEqual({ terreiroId: 42, teamUserId: null });
+  });
+
+  it("assina e verifica a sessão de um usuário da equipe (mesmo terreiroId, teamUserId próprio)", async () => {
+    const token = await signTerreiroSession(42, 99);
+    const session = await verifyTerreiroSession(token);
+    expect(session).toEqual({ terreiroId: 42, teamUserId: 99 });
   });
 
   it("rejeita token inválido ou adulterado", async () => {
@@ -57,7 +66,7 @@ describe("terreiroAuth session", () => {
     // Um JWT qualquer sem o campo terreiroId/scope correto deve ser rejeitado.
     const foreignToken = await signTerreiroSession(1);
     // Sanity check: o token do próprio terreiro funciona.
-    expect(await verifyTerreiroSession(foreignToken)).toBe(1);
+    expect(await verifyTerreiroSession(foreignToken)).toEqual({ terreiroId: 1, teamUserId: null });
   });
 });
 
@@ -81,6 +90,8 @@ describe("portal.me", () => {
       phone: null,
       logoUrl: null,
       tierName: null,
+      mustChangePassword: false,
+      loggedInAsName: "Terreiro Teste",
     });
   });
 });

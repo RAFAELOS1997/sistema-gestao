@@ -72,8 +72,10 @@ import {
   createTerreiroUser,
   listTerreiroUsers,
   getTerreiroUserByUsername,
+  getTerreiroUserById,
   setTerreiroUserActive,
   touchTerreiroUserLastSignedIn,
+  updateTerreiroUserPassword,
   listPartnerVisibleProducts,
   listPartnerTiers,
   getPartnerTierById,
@@ -1532,6 +1534,7 @@ const terreirosRouter = router({
         phone: input.phone || null,
         tierId,
         isActive: 1,
+        mustChangePassword: 1,
       });
       await createAuditLog({
         userId: ctx.user.id,
@@ -1685,6 +1688,16 @@ const portalRouter = router({
   me: publicProcedure.query(async ({ ctx }) => {
     if (!ctx.terreiro) return null;
     const tier = ctx.terreiro.tierId ? await getPartnerTierById(ctx.terreiro.tierId) : null;
+    // Se logou com um usuário da equipe, a senha "pré-cadastrada" é a DELE,
+    // não a do terreiro principal — o popup de trocar senha olha pra conta
+    // certa dependendo de quem entrou.
+    let mustChangePassword = ctx.terreiro.mustChangePassword === 1;
+    let loggedInAsName = ctx.terreiro.name;
+    if (ctx.teamUserId) {
+      const teamUser = await getTerreiroUserById(ctx.teamUserId);
+      mustChangePassword = teamUser?.mustChangePassword === 1;
+      loggedInAsName = teamUser?.name ?? ctx.terreiro.name;
+    }
     return {
       id: ctx.terreiro.id,
       name: ctx.terreiro.name,
@@ -1693,6 +1706,8 @@ const portalRouter = router({
       phone: ctx.terreiro.phone,
       logoUrl: ctx.terreiro.logoUrl,
       tierName: tier?.name ?? null,
+      mustChangePassword,
+      loggedInAsName,
     };
   }),
 
@@ -1715,7 +1730,7 @@ const portalRouter = router({
       if (teamUser && teamUser.isActive && (await verifyPassword(input.password, teamUser.passwordHash))) {
         const parentTerreiro = await getTerreiroById(teamUser.terreiroId);
         if (parentTerreiro && parentTerreiro.isActive) {
-          const sessionToken = await signTerreiroSession(parentTerreiro.id);
+          const sessionToken = await signTerreiroSession(parentTerreiro.id, teamUser.id);
           const cookieOptions = getSessionCookieOptions(ctx.req);
           ctx.res.cookie(TERREIRO_COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
           await touchTerreiroUserLastSignedIn(teamUser.id);
@@ -1757,6 +1772,29 @@ const portalRouter = router({
           throw new TRPCError({ code: "BAD_REQUEST", message: "Logo muito grande. Tente uma imagem menor." });
         }
         await updateTerreiro(ctx.terreiro.id, { logoUrl: input.logoUrl });
+        return { success: true };
+      }),
+
+    // Troca a senha de QUEM ESTÁ LOGADO — se entrou como usuário da equipe,
+    // troca a senha dele; se entrou com o login principal, troca a do
+    // terreiro. Exige a senha atual (a "pré-cadastrada", no primeiro acesso)
+    // pra confirmar que é realmente quem diz ser.
+    changePassword: terreiroProcedure
+      .input(z.object({ currentPassword: z.string().min(1), newPassword: z.string().min(6, "Senha deve ter ao menos 6 caracteres") }))
+      .mutation(async ({ input, ctx }) => {
+        const newPasswordHash = await hashPassword(input.newPassword);
+        if (ctx.teamUserId) {
+          const teamUser = await getTerreiroUserById(ctx.teamUserId);
+          if (!teamUser || !(await verifyPassword(input.currentPassword, teamUser.passwordHash))) {
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha atual incorreta" });
+          }
+          await updateTerreiroUserPassword(teamUser.id, newPasswordHash);
+        } else {
+          if (!(await verifyPassword(input.currentPassword, ctx.terreiro.passwordHash))) {
+            throw new TRPCError({ code: "UNAUTHORIZED", message: "Senha atual incorreta" });
+          }
+          await updateTerreiro(ctx.terreiro.id, { passwordHash: newPasswordHash, mustChangePassword: 0 });
+        }
         return { success: true };
       }),
   }),

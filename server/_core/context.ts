@@ -10,6 +10,11 @@ export type TrpcContext = {
   res: CreateExpressContextOptions["res"];
   user: User | null;
   terreiro: Terreiro | null;
+  // Qual login foi usado dentro da sessão do terreiro: null = o principal,
+  // número = o id em terreiroUsers (usuário da equipe) — os dois têm as
+  // mesmas permissões, isso só importa pra saber de quem é a senha na hora
+  // de trocar.
+  teamUserId: number | null;
 };
 
 export async function createContext(
@@ -25,15 +30,20 @@ export async function createContext(
   }
 
   let terreiro: Terreiro | null = null;
+  let teamUserId: number | null = null;
   try {
     const cookies = parseCookieHeader(opts.req.headers.cookie ?? "");
-    const terreiroId = await verifyTerreiroSession(cookies[TERREIRO_COOKIE_NAME]);
-    if (terreiroId) {
-      const found = await getTerreiroById(terreiroId);
-      if (found && found.isActive) terreiro = found;
+    const session = await verifyTerreiroSession(cookies[TERREIRO_COOKIE_NAME]);
+    if (session) {
+      const found = await getTerreiroById(session.terreiroId);
+      if (found && found.isActive) {
+        terreiro = found;
+        teamUserId = session.teamUserId;
+      }
     }
   } catch (error) {
     terreiro = null;
+    teamUserId = null;
   }
 
   return {
@@ -41,5 +51,6 @@ export async function createContext(
     res: opts.res,
     user,
     terreiro,
+    teamUserId,
   };
 }

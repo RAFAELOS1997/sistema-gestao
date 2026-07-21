@@ -280,6 +280,7 @@ export const terreiros = mysqlTable("terreiros", {
   logoUrl: mediumtext("logoUrl"), // logo do terreiro, upload do próprio parceiro (base64)
   tierId: int("tierId"), // plano de parceria (Prata/Ouro/Diamante) — define o preço que ele vê
   isActive: int("isActive").default(1).notNull(),
+  mustChangePassword: int("mustChangePassword").default(0).notNull(), // força trocar a senha pré-cadastrada no próximo login
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn"),
@@ -299,6 +300,7 @@ export const terreiroUsers = mysqlTable("terreiroUsers", {
   username: varchar("username", { length: 100 }).notNull().unique(),
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   isActive: int("isActive").default(1).notNull(),
+  mustChangePassword: int("mustChangePassword").default(1).notNull(), // força trocar a senha pré-cadastrada no primeiro login
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn"),
