@@ -82,15 +82,17 @@ export default function PublicGenerateOrder() {
 
   const subtotal = cartItems.reduce((sum, i) => sum + i.total, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
-  const missingForMinimum = Math.max(0, minimumCents - subtotal);
+  // Mínimo vale só pros itens do fornecedor — estoque não tem restrição.
+  const catalogSubtotal = cartItems.filter((i) => i.source === "catalogo").reduce((sum, i) => sum + i.total, 0);
+  const missingForMinimum = catalogSubtotal > 0 ? Math.max(0, minimumCents - catalogSubtotal) : 0;
 
   const handleSubmit = () => {
     if (cartItems.length === 0) {
       toast.error("Adicione ao menos um item ao pedido");
       return;
     }
-    if (subtotal < minimumCents) {
-      toast.error(`Pedido mínimo de R$ ${(minimumCents / 100).toFixed(2)}`);
+    if (missingForMinimum > 0) {
+      toast.error(`Pedido mínimo de R$ ${(minimumCents / 100).toFixed(2)} nos itens do fornecedor`);
       return;
     }
     if (!customerName.trim() || !customerPhone.trim()) {
@@ -129,7 +131,8 @@ export default function PublicGenerateOrder() {
       <div>
         <h1 className="text-xl sm:text-3xl font-bold text-foreground">Fazer Pedido</h1>
         <p className="text-muted-foreground text-sm">
-          Monte seu pedido e a gente confirma com você por telefone. Pedido mínimo: R$ {(minimumCents / 100).toFixed(2)}
+          Monte seu pedido e a gente confirma com você por telefone. Pedido mínimo de R$ {(minimumCents / 100).toFixed(2)} só
+          nos itens do fornecedor — itens do estoque não têm mínimo.
         </p>
       </div>
 
@@ -299,7 +302,7 @@ export default function PublicGenerateOrder() {
               <div className="px-4 pb-4">
                 {missingForMinimum > 0 ? (
                   <p className="text-xs text-amber-400 mb-2 text-center">
-                    Faltam R$ {(missingForMinimum / 100).toFixed(2)} pra atingir o pedido mínimo de R$ {(minimumCents / 100).toFixed(2)}
+                    Faltam R$ {(missingForMinimum / 100).toFixed(2)} pra atingir o pedido mínimo de R$ {(minimumCents / 100).toFixed(2)} nos itens do fornecedor
                   </p>
                 ) : null}
                 <Button

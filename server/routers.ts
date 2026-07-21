@@ -1800,11 +1800,14 @@ const portalRouter = router({
           };
         });
 
-        const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
-        if (subtotal < ORDER_MINIMUM_CENTS) {
+        // Mínimo de R$150 vale só pros itens do fornecedor (reflete a compra
+        // mínima real de R$300 que a loja tem com ele) — produto do estoque
+        // já é da loja, não tem restrição nenhuma.
+        const catalogSubtotal = orderItems.filter((i) => i.source === "catalogo").reduce((sum, item) => sum + item.totalPrice, 0);
+        if (catalogSubtotal > 0 && catalogSubtotal < ORDER_MINIMUM_CENTS) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: `Pedido mínimo de R$ ${(ORDER_MINIMUM_CENTS / 100).toFixed(2)} — faltam R$ ${((ORDER_MINIMUM_CENTS - subtotal) / 100).toFixed(2)}`,
+            message: `Pedido mínimo de R$ ${(ORDER_MINIMUM_CENTS / 100).toFixed(2)} nos itens do fornecedor — faltam R$ ${((ORDER_MINIMUM_CENTS - catalogSubtotal) / 100).toFixed(2)}`,
           });
         }
 
@@ -1922,10 +1925,12 @@ const publicStoreRouter = router({
         });
 
         const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
-        if (subtotal < ORDER_MINIMUM_CENTS) {
+        // Mínimo de R$150 vale só pros itens do fornecedor — estoque não tem restrição.
+        const catalogSubtotal = orderItems.filter((i) => i.source === "catalogo").reduce((sum, item) => sum + item.totalPrice, 0);
+        if (catalogSubtotal > 0 && catalogSubtotal < ORDER_MINIMUM_CENTS) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: `Pedido mínimo de R$ ${(ORDER_MINIMUM_CENTS / 100).toFixed(2)} — faltam R$ ${((ORDER_MINIMUM_CENTS - subtotal) / 100).toFixed(2)}`,
+            message: `Pedido mínimo de R$ ${(ORDER_MINIMUM_CENTS / 100).toFixed(2)} nos itens do fornecedor — faltam R$ ${((ORDER_MINIMUM_CENTS - catalogSubtotal) / 100).toFixed(2)}`,
           });
         }
 
