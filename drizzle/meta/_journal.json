@@ -169,6 +169,13 @@
       "when": 1784597771175,
       "tag": "0023_good_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1784612201218,
+      "tag": "0024_mushy_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

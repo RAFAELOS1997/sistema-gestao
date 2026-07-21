@@ -13,6 +13,7 @@ import {
   paymentMethods,
   partnerOrders, partnerOrderItems,
   publicOrders, publicOrderItems,
+  partnerApplications, InsertPartnerApplication,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -430,6 +431,45 @@ export async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE infinitePayCharges ADD COLUMN publicOrderId int`);
   } catch (error: any) {
     if (!isDupColumn(error)) console.error("[migrations] infinitePayCharges.publicOrderId:", error);
+  }
+
+  // Novos percentuais dos planos ("regra dos planos" 2026-07-21) — só
+  // aplica se o valor ainda for o default antigo, pra nunca sobrescrever um
+  // ajuste manual que o admin já tenha feito depois disso.
+  const TIER_PERCENT_MIGRATIONS: [string, number, number][] = [
+    ["Cobre", 3, 10],
+    ["Bronze", 5, 12],
+    ["Prata", 10, 15],
+    ["Ouro", 15, 18],
+    ["Diamante", 20, 22],
+  ];
+  for (const [name, oldPercent, newPercent] of TIER_PERCENT_MIGRATIONS) {
+    try {
+      await db.execute(
+        sql`UPDATE partnerTiers SET discountPercent = ${newPercent} WHERE name = ${name} AND discountPercent = ${oldPercent}`
+      );
+    } catch (error: any) {
+      console.error(`[migrations] partnerTiers.${name} novo percentual:`, error);
+    }
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS partnerApplications (
+        id int AUTO_INCREMENT NOT NULL,
+        terreiroName varchar(255) NOT NULL,
+        contactName varchar(255) NOT NULL,
+        phone varchar(20) NOT NULL,
+        city varchar(100),
+        notes text,
+        status enum('pendente','aprovado','recusado') NOT NULL DEFAULT 'pendente',
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] partnerApplications:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -1122,11 +1162,11 @@ export async function removeTerreiroProductPrice(terreiroId: number, productId: 
 // seedPartnerTiers). O admin só pode ajustar o percentual de desconto.
 
 export const FIXED_PARTNER_TIERS = [
-  { name: "Cobre", sortOrder: 1, discountPercent: 3 },
-  { name: "Bronze", sortOrder: 2, discountPercent: 5 },
-  { name: "Prata", sortOrder: 3, discountPercent: 10 },
-  { name: "Ouro", sortOrder: 4, discountPercent: 15 },
-  { name: "Diamante", sortOrder: 5, discountPercent: 20 },
+  { name: "Cobre", sortOrder: 1, discountPercent: 10 },
+  { name: "Bronze", sortOrder: 2, discountPercent: 12 },
+  { name: "Prata", sortOrder: 3, discountPercent: 15 },
+  { name: "Ouro", sortOrder: 4, discountPercent: 18 },
+  { name: "Diamante", sortOrder: 5, discountPercent: 22 },
 ] as const;
 
 // Garante que os 5 planos fixos existam com o sortOrder certo — chamado no
@@ -1466,6 +1506,78 @@ export async function updatePartnerOrderStatus(id: number, status: "pendente" | 
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(partnerOrders).set({ status }).where(eq(partnerOrders.id, id));
+}
+
+// Avanço automático de plano — "regra dos planos" (2026-07-21): reavalia
+// com base nos pedidos feitos pelo terreiro (tabela partnerOrders, os
+// pedidos de verdade feitos em "Gerar Pedidos") nos últimos 3 meses.
+// Sempre pega o plano mais alto que ele já mereceu nesse período — nunca
+// rebaixa sozinho aqui (rebaixar exigiria um job periódico que não existe
+// nesse servidor; o admin pode ajustar manualmente se quiser).
+export async function recalculatePartnerTierByOrders(terreiroId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+
+  const orders = await db
+    .select({ subtotal: partnerOrders.subtotal, createdAt: partnerOrders.createdAt })
+    .from(partnerOrders)
+    .where(
+      and(
+        eq(partnerOrders.terreiroId, terreiroId),
+        gte(partnerOrders.createdAt, threeMonthsAgo),
+        sql`${partnerOrders.status} != 'cancelado'`
+      )
+    );
+
+  const ordersCount = orders.length;
+  const totalSpent = orders.reduce((sum, o) => sum + o.subtotal, 0);
+  const monthsWithOrder = new Set(orders.map((o) => `${o.createdAt.getFullYear()}-${o.createdAt.getMonth()}`)).size;
+
+  let qualifyingTierName: string;
+  if (totalSpent > 50000) qualifyingTierName = "Diamante"; // > R$500
+  else if (totalSpent > 30000) qualifyingTierName = "Ouro"; // > R$300
+  else if (monthsWithOrder >= 3) qualifyingTierName = "Prata"; // pediu todo mês nos últimos 3
+  else if (ordersCount >= 1) qualifyingTierName = "Bronze"; // já fez o primeiro pedido
+  else qualifyingTierName = "Cobre";
+
+  const allTiers = await listPartnerTiers();
+  const qualifyingTier = allTiers.find((t) => t.name === qualifyingTierName);
+  if (!qualifyingTier) return null;
+
+  const terreiro = await getTerreiroById(terreiroId);
+  if (!terreiro) return null;
+
+  const currentTier = allTiers.find((t) => t.id === terreiro.tierId);
+  // Só sobe (ou define, se não tinha plano) — nunca desce sozinho aqui.
+  if (currentTier && currentTier.sortOrder >= qualifyingTier.sortOrder) {
+    return { upgraded: false, tierName: currentTier.name };
+  }
+
+  await db.update(terreiros).set({ tierId: qualifyingTier.id }).where(eq(terreiros.id, terreiroId));
+  return { upgraded: true, tierName: qualifyingTier.name };
+}
+
+// ─── Solicitações de Parceria (página "Parceria com a Toca") ──────────────────
+
+export async function createPartnerApplication(data: Omit<InsertPartnerApplication, "id" | "createdAt" | "updatedAt" | "status">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(partnerApplications).values({ ...data, status: "pendente" });
+}
+
+export async function listPartnerApplications() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(partnerApplications).orderBy(desc(partnerApplications.createdAt));
+}
+
+export async function updatePartnerApplicationStatus(id: number, status: "pendente" | "aprovado" | "recusado") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(partnerApplications).set({ status }).where(eq(partnerApplications.id, id));
 }
 
 // ─── Catálogo Público (loja online, sem login) ─────────────────────────────────

@@ -160,3 +160,31 @@ describe("partnerOrders.list / publicOrders.list", () => {
     await expect(staffCaller.publicOrders.list()).resolves.toEqual([]);
   });
 });
+
+// ─── Solicitações de Parceria (página "Parceria com a Toca") ──────────────────
+
+describe("partnerApplications", () => {
+  it("create é público — qualquer visitante pode se candidatar sem sessão (não bloqueia por falta de auth)", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    // Sem banco de dados no ambiente de teste, a mutation falha ao gravar —
+    // o que importa aqui é que NUNCA falha por falta de sessão/autenticação.
+    await expect(
+      caller.partnerApplications.create({
+        terreiroName: "Terreiro Teste",
+        contactName: "Fulano",
+        phone: "16999999999",
+      })
+    ).rejects.not.toMatchObject({ message: UNAUTHED_ERR_MSG });
+  });
+
+  it("list e updateStatus exigem sessão de staff", async () => {
+    const anonCaller = appRouter.createCaller(createPublicContext());
+    await expect(anonCaller.partnerApplications.list()).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG });
+    await expect(
+      anonCaller.partnerApplications.updateStatus({ id: 1, status: "aprovado" })
+    ).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG });
+
+    const staffCaller = appRouter.createCaller(createStaffContext());
+    await expect(staffCaller.partnerApplications.list()).resolves.toEqual([]);
+  });
+});

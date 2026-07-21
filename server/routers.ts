@@ -98,6 +98,10 @@ import {
   listAllPublicOrders,
   updatePublicOrderStatus,
   fulfillPublicOrderForCharge,
+  recalculatePartnerTierByOrders,
+  createPartnerApplication,
+  listPartnerApplications,
+  updatePartnerApplicationStatus,
 } from "./db";
 
 // O hash de senha (scrypt) nunca deve sair do servidor — sem isso, auth.me e
@@ -1507,13 +1511,20 @@ const terreirosRouter = router({
     )
     .mutation(async ({ input, ctx }) => {
       const passwordHash = await hashPassword(input.password);
+      // Todo parceiro novo já nasce no plano Cobre (10% — regra definida em
+      // 2026-07-21), a menos que o admin escolha outro plano na hora.
+      let tierId = input.tierId ?? null;
+      if (tierId === null) {
+        const tiers = await listPartnerTiers();
+        tierId = tiers.find((t) => t.name === "Cobre")?.id ?? null;
+      }
       const result = await createTerreiro({
         name: input.name,
         username: input.username,
         passwordHash,
         contactName: input.contactName || null,
         phone: input.phone || null,
-        tierId: input.tierId ?? null,
+        tierId,
         isActive: 1,
       });
       await createAuditLog({
@@ -1813,7 +1824,14 @@ const portalRouter = router({
         }
 
         const order = await createPartnerOrder(ctx.terreiro.id, orderItems);
-        return { success: true, orderId: order.id, subtotal: order.subtotal };
+        const tierUpdate = await recalculatePartnerTierByOrders(ctx.terreiro.id);
+        return {
+          success: true,
+          orderId: order.id,
+          subtotal: order.subtotal,
+          tierUpgraded: tierUpdate?.upgraded ?? false,
+          newTierName: tierUpdate?.upgraded ? tierUpdate.tierName : null,
+        };
       }),
   }),
 });
@@ -2057,6 +2075,48 @@ const publicOrdersRouter = router({
     }),
 });
 
+// ─── Solicitações de Parceria (página pública "Parceria com a Toca") ──────────
+// Terreiro interessado preenche o formulário — não cria login sozinho, só
+// avisa o Rafael, que entra em contato e cria o acesso pelo cadastro normal.
+
+const partnerApplicationsRouter = router({
+  create: publicProcedure
+    .input(
+      z.object({
+        terreiroName: z.string().min(1).max(255),
+        contactName: z.string().min(1).max(255),
+        phone: z.string().min(8).max(20),
+        city: z.string().max(100).optional(),
+        notes: z.string().max(1000).optional(),
+      })
+    )
+    .mutation(async ({ input }) => {
+      await createPartnerApplication({
+        terreiroName: input.terreiroName,
+        contactName: input.contactName,
+        phone: input.phone,
+        city: input.city || null,
+        notes: input.notes || null,
+      });
+      return { success: true };
+    }),
+
+  list: protectedProcedure.query(() => listPartnerApplications()),
+
+  updateStatus: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), status: z.enum(["pendente", "aprovado", "recusado"]) }))
+    .mutation(async ({ input, ctx }) => {
+      await updatePartnerApplicationStatus(input.id, input.status);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "partner_application_status_updated",
+        module: "partners",
+        description: `Solicitação de parceria ID ${input.id} marcada como "${input.status}"`,
+      });
+      return { success: true };
+    }),
+});
+
 // ─── Planos de Parceria (Cobre/Bronze/Prata/Ouro/Diamante) ────────────────────
 // 5 planos fixos, cada um com um percentual de desconto fixo sobre o preço de
 // venda da loja. O preço do terreiro é sempre calculado na hora a partir
@@ -2185,6 +2245,7 @@ export const appRouter = router({
   partnerOrders: partnerOrdersRouter,
   publicStore: publicStoreRouter,
   publicOrders: publicOrdersRouter,
+  partnerApplications: partnerApplicationsRouter,
   infinitePay: infinitePayRouter,
   paymentMethods: paymentMethodsRouter,
 });

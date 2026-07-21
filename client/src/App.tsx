@@ -20,6 +20,7 @@ import PartnerOrders from "./pages/PartnerOrders";
 import PublicCatalogLayout from "./components/public/PublicCatalogLayout";
 import PublicCatalogProducts from "./pages/public/PublicCatalogProducts";
 import PublicGenerateOrder from "./pages/public/PublicGenerateOrder";
+import PublicPartnership from "./pages/public/PublicPartnership";
 import PublicOrders from "./pages/PublicOrders";
 import { PortalCartProvider } from "./contexts/PortalCartContext";
 import { PublicCartProvider } from "./contexts/PublicCartContext";
@@ -143,6 +144,11 @@ function Router() {
       <Route path="/loja/pedidos">
         <PublicCatalogLayout>
           <PublicGenerateOrder />
+        </PublicCatalogLayout>
+      </Route>
+      <Route path="/parceria">
+        <PublicCatalogLayout>
+          <PublicPartnership />
         </PublicCatalogLayout>
       </Route>
 

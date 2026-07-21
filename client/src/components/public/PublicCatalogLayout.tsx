@@ -6,6 +6,7 @@ import { WHATSAPP_LINK } from "@/lib/contact";
 const NAV_ITEMS = [
   { label: "Pronta Entrega", path: "/loja/produtos" },
   { label: "Fazer Pedidos", path: "/loja/pedidos" },
+  { label: "Seja Parceiro", path: "/parceria" },
 ];
 
 export default function PublicCatalogLayout({ children }: { children: React.ReactNode }) {

@@ -419,3 +419,23 @@ export const publicOrderItems = mysqlTable("publicOrderItems", {
 
 export type PublicOrderItem = typeof publicOrderItems.$inferSelect;
 export type InsertPublicOrderItem = typeof publicOrderItems.$inferInsert;
+
+// ─── Solicitações de Parceria (página "Parceria com a Toca") ──────────────────
+// Terreiro interessado preenche o formulário na página pública — não cria
+// login sozinho, só avisa o Rafael, que cria o acesso pelo cadastro normal
+// de terreiros depois de entrar em contato.
+
+export const partnerApplications = mysqlTable("partnerApplications", {
+  id: int("id").autoincrement().primaryKey(),
+  terreiroName: varchar("terreiroName", { length: 255 }).notNull(),
+  contactName: varchar("contactName", { length: 255 }).notNull(),
+  phone: varchar("phone", { length: 20 }).notNull(),
+  city: varchar("city", { length: 100 }),
+  notes: text("notes"),
+  status: mysqlEnum("status", ["pendente", "aprovado", "recusado"]).notNull().default("pendente"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PartnerApplication = typeof partnerApplications.$inferSelect;
+export type InsertPartnerApplication = typeof partnerApplications.$inferInsert;

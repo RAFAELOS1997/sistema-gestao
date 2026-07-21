@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Power, Medal, Eye, Link2 } from "lucide-react";
+import { Plus, Edit2, Power, Medal, Eye, Link2, UserPlus, Check, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -26,6 +26,15 @@ export default function Partners() {
   const { data: tiers = [] } = trpc.partnerTiers.list.useQuery();
   const { data: openConsignments = [] } = trpc.terreiros.consignments.openCountByTerreiro.useQuery();
   const { data: spendingTotals = [] } = trpc.terreiros.spendingTotals.useQuery();
+  const { data: applications = [] } = trpc.partnerApplications.list.useQuery();
+  const pendingApplications = applications.filter((a: any) => a.status === "pendente");
+  const applicationStatusMutation = trpc.partnerApplications.updateStatus.useMutation({
+    onSuccess: () => {
+      toast.success("Atualizado!");
+      utils.partnerApplications.list.invalidate();
+    },
+    onError: (error) => toast.error(`Erro: ${error.message}`),
+  });
   const tierName = (tierId: number | null) => tiers.find((t) => t.id === tierId)?.name ?? null;
   const openItemsOf = (terreiroId: number) =>
     Number(openConsignments.find((c) => c.terreiroId === terreiroId)?.openItems ?? 0);
@@ -242,6 +251,55 @@ export default function Partners() {
           </Dialog>
         </div>
       </div>
+
+      {pendingApplications.length > 0 && (
+        <Card className="border-accent/40">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-accent" />
+              Solicitações de Parceria ({pendingApplications.length})
+            </CardTitle>
+            <CardDescription>
+              Terreiros que se cadastraram na página "Parceria com a Toca" — entre em contato e crie o login em "Novo Terreiro"
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {pendingApplications.map((app: any) => (
+              <div key={app.id} className="p-3 bg-background rounded-lg border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <p className="font-medium text-foreground text-sm">{app.terreiroName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {app.contactName} · {app.phone}{app.city ? ` · ${app.city}` : ""}
+                  </p>
+                  {app.notes && <p className="text-xs text-muted-foreground mt-1">"{app.notes}"</p>}
+                </div>
+                <div className="flex gap-2 shrink-0">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() => applicationStatusMutation.mutate({ id: app.id, status: "aprovado" })}
+                    disabled={applicationStatusMutation.isPending}
+                  >
+                    <Check className="w-3.5 h-3.5 mr-1 text-green-500" />
+                    Aprovar
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    onClick={() => applicationStatusMutation.mutate({ id: app.id, status: "recusado" })}
+                    disabled={applicationStatusMutation.isPending}
+                  >
+                    <X className="w-3.5 h-3.5 mr-1 text-destructive" />
+                    Recusar
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

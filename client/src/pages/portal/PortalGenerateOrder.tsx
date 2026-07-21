@@ -53,8 +53,13 @@ export default function PortalGenerateOrder() {
   }, [catalogQuery.data, stockQuery.data]);
 
   const createOrderMutation = trpc.portal.orders.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
       toast.success("Pedido enviado! A Toca da Pantera vai confirmar em breve.");
+      if (result.tierUpgraded && result.newTierName) {
+        toast.success(`🎉 Parabéns! Seu terreiro subiu de plano — agora vocês são ${result.newTierName}!`, {
+          duration: 8000,
+        });
+      }
       clearCart();
       setCartExpanded(false);
       utils.portal.orders.list.invalidate();
