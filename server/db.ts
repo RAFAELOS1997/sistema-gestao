@@ -1560,6 +1560,29 @@ export async function recalculatePartnerTierByOrders(terreiroId: number) {
   return { upgraded: true, tierName: qualifyingTier.name };
 }
 
+// Ter um "stand" da Toca no terreiro (comodato) garante pelo menos o plano
+// Bronze — chamado toda vez que um comodato novo é criado. Só sobe (nunca
+// desce) e não faz nada se o terreiro já está no Bronze ou acima.
+export async function ensureMinimumBronzeForConsignment(terreiroId: number) {
+  const db = await getDb();
+  if (!db) return null;
+
+  const allTiers = await listPartnerTiers();
+  const bronzeTier = allTiers.find((t) => t.name === "Bronze");
+  if (!bronzeTier) return null;
+
+  const terreiro = await getTerreiroById(terreiroId);
+  if (!terreiro) return null;
+
+  const currentTier = allTiers.find((t) => t.id === terreiro.tierId);
+  if (currentTier && currentTier.sortOrder >= bronzeTier.sortOrder) {
+    return { upgraded: false, tierName: currentTier.name };
+  }
+
+  await db.update(terreiros).set({ tierId: bronzeTier.id }).where(eq(terreiros.id, terreiroId));
+  return { upgraded: true, tierName: bronzeTier.name };
+}
+
 // ─── Solicitações de Parceria (página "Parceria com a Toca") ──────────────────
 
 export async function createPartnerApplication(data: Omit<InsertPartnerApplication, "id" | "createdAt" | "updatedAt" | "status">) {

@@ -47,8 +47,11 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
   };
 
   const createMutation = trpc.terreiros.consignments.create.useMutation({
-    onSuccess: () => {
+    onSuccess: (result) => {
       toast.success("Itens registrados no comodato! O estoque da loja já foi baixado.");
+      if (result.tierUpgraded && result.newTierName) {
+        toast.success(`Plano do terreiro subiu pra ${result.newTierName} por causa do stand de comodato!`);
+      }
       setIsDialogOpen(false);
       setForm({ productId: "", quantity: "1", unitPrice: "", notes: "" });
       invalidate();

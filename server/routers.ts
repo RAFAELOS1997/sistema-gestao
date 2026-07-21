@@ -99,6 +99,7 @@ import {
   updatePublicOrderStatus,
   fulfillPublicOrderForCharge,
   recalculatePartnerTierByOrders,
+  ensureMinimumBronzeForConsignment,
   createPartnerApplication,
   listPartnerApplications,
   updatePartnerApplicationStatus,
@@ -1632,13 +1633,14 @@ const terreirosRouter = router({
       )
       .mutation(async ({ input, ctx }) => {
         await createConsignment(input);
+        const tierUpdate = await ensureMinimumBronzeForConsignment(input.terreiroId);
         await createAuditLog({
           userId: ctx.user.id,
           action: "consignment_created",
           module: "partners",
           description: `Comodato: ${input.quantity}x produto ${input.productId} deixado no terreiro ${input.terreiroId}`,
         });
-        return { success: true };
+        return { success: true, tierUpgraded: tierUpdate?.upgraded ?? false, newTierName: tierUpdate?.upgraded ? tierUpdate.tierName : null };
       }),
 
     markSold: protectedProcedure

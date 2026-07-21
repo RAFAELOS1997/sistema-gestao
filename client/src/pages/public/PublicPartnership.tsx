@@ -19,6 +19,10 @@ import {
   PackageCheck,
   Percent,
   CalendarClock,
+  Store,
+  Wallet,
+  MapPin,
+  Rocket,
 } from "lucide-react";
 
 const TIERS = [
@@ -131,6 +135,70 @@ export default function PublicPartnership() {
           </CardContent>
         </Card>
       </div>
+
+      <DecorativeDivider className="max-w-sm mx-auto" />
+
+      {/* Comodato / stand no terreiro */}
+      <div className="max-w-4xl mx-auto">
+        <Card className="border-accent/40 overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-accent/10 via-transparent to-transparent pointer-events-none" />
+          <CardContent className="pt-6 relative space-y-5">
+            <div className="flex items-center gap-2">
+              <Store className="w-6 h-6 text-accent" />
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/15 text-accent text-[11px] font-semibold">
+                <MapPin className="w-3 h-3" />
+                Por enquanto só em Ribeirão Preto e região
+              </div>
+            </div>
+            <h2 className="text-xl sm:text-2xl font-bold text-foreground">
+              Tenha uma bancada de produtos da Toca dentro do seu terreiro — <span className="text-accent">sem gastar um real</span>
+            </h2>
+            <p className="text-sm text-muted-foreground max-w-2xl">
+              É o comodato: a gente leva os produtos até o seu terreiro e deixa lá, sem cobrar nada na entrega. Você
+              vende nos dias de gira, atendimento ou consulta, e só nos repassa o valor combinado de cada item
+              vendido — o que não vender, a gente busca de volta, sem custo nenhum pra você.
+            </p>
+
+            <div className="grid sm:grid-cols-3 gap-4">
+              <div className="flex flex-col items-center text-center gap-1.5 p-3">
+                <Wallet className="w-6 h-6 text-accent" />
+                <p className="font-semibold text-foreground text-sm">Você escolhe o preço</p>
+                <p className="text-xs text-muted-foreground">
+                  A gente combina um valor por item. Você vende pelo preço que quiser — a diferença é seu lucro,
+                  100%.
+                </p>
+              </div>
+              <div className="flex flex-col items-center text-center gap-1.5 p-3">
+                <PackageCheck className="w-6 h-6 text-accent" />
+                <p className="font-semibold text-foreground text-sm">Zero risco, zero investimento</p>
+                <p className="text-xs text-muted-foreground">
+                  Não paga nada na entrega. Só acerta o que vendeu. O que sobrar, devolve — sem dívida, sem prejuízo.
+                </p>
+              </div>
+              <div className="flex flex-col items-center text-center gap-1.5 p-3">
+                <Rocket className="w-6 h-6 text-accent" />
+                <p className="font-semibold text-foreground text-sm">Plano Bronze na hora</p>
+                <p className="text-xs text-muted-foreground">
+                  Ao colocar sua primeira bancada de comodato, seu terreiro já sobe pra Bronze automaticamente
+                  (ou fica no plano que já tiver, se for maior).
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-background rounded-lg border border-border p-4">
+              <p className="text-sm text-foreground font-medium mb-1">Exemplo bem simples:</p>
+              <p className="text-sm text-muted-foreground">
+                A Toca deixa 10 guias com você, combinado R$ 15,00 cada — R$ 150,00 no total. Você vende cada uma
+                por R$ 25,00 pros seus consulentes: R$ 250,00 arrecadados. Você repassa os R$ 150,00 combinados, e
+                fica com <strong className="text-accent">R$ 100,00 de lucro líquido</strong> — sem ter gasto nada
+                do próprio bolso pra começar.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <DecorativeDivider className="max-w-sm mx-auto" />
 
       {/* Escada de planos */}
       <div className="max-w-4xl mx-auto space-y-5">
