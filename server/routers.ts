@@ -88,6 +88,7 @@ import {
   listPaymentMethods,
   updatePaymentMethod,
   listAvailableSupplierCatalogForOrders,
+  listPartnerOrderableStockProducts,
   createPartnerOrder,
   listPartnerOrdersForTerreiro,
   listAllPartnerOrders,
@@ -1691,12 +1692,13 @@ const portalRouter = router({
       .query(({ ctx, input }) => listConsignments(ctx.terreiro.id, input?.includeSettled ?? false)),
   }),
 
-  // Tela "Gerar Pedidos": catálogo do fornecedor já com o preço do plano do
-  // parceiro aplicado (e travado num mínimo de 50% de comissão) — nunca
-  // devolve supplierId/sourceUrl/sourceSlug, o parceiro não pode saber quem
-  // é o fornecedor.
+  // Tela "Gerar Pedidos": dois catálogos pra montar o pedido — itens do
+  // fornecedor (nunca revela supplierId/sourceUrl/sourceSlug, o parceiro não
+  // pode saber quem é o fornecedor) e produtos já no estoque da loja. Ambos
+  // já com o preço do plano do parceiro aplicado e travados num mínimo de
+  // 50% de comissão.
   orderCatalog: router({
-    list: terreiroProcedure.query(async ({ ctx }) => {
+    catalog: terreiroProcedure.query(async ({ ctx }) => {
       const discountPercent = ctx.terreiro.tierId
         ? (await getPartnerTierById(ctx.terreiro.tierId))?.discountPercent ?? 0
         : 0;
@@ -1710,6 +1712,18 @@ const portalRouter = router({
         price: computePartnerOrderItemPrice(item.price, item.suggestedSalePrice, discountPercent),
       }));
     }),
+
+    stock: terreiroProcedure.query(async ({ ctx }) => {
+      const items = await listPartnerOrderableStockProducts(ctx.terreiro.id, ctx.terreiro.tierId);
+      return items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        imageUrl: item.imageUrl,
+        currentStock: item.currentStock,
+        price: computePartnerOrderItemPrice(item.costPrice, item.salePrice, 0), // salePrice já vem com desconto do plano aplicado
+      }));
+    }),
   }),
 
   orders: router({
@@ -1720,23 +1734,51 @@ const portalRouter = router({
     create: terreiroProcedure
       .input(
         z.object({
-          items: z.array(z.object({ supplierCatalogId: z.number().int().positive(), quantity: z.number().int().positive() })).min(1),
+          items: z
+            .array(
+              z.object({
+                source: z.enum(["catalogo", "estoque"]),
+                id: z.number().int().positive(),
+                quantity: z.number().int().positive(),
+              })
+            )
+            .min(1),
         })
       )
       .mutation(async ({ input, ctx }) => {
         const discountPercent = ctx.terreiro.tierId
           ? (await getPartnerTierById(ctx.terreiro.tierId))?.discountPercent ?? 0
           : 0;
+
         const catalogItems = await listAvailableSupplierCatalogForOrders();
         const catalogById = new Map(catalogItems.map((i) => [i.id, i]));
+        const stockItems = await listPartnerOrderableStockProducts(ctx.terreiro.id, ctx.terreiro.tierId);
+        const stockById = new Map(stockItems.map((i) => [i.id, i]));
 
-        const orderItems = input.items.map(({ supplierCatalogId, quantity }) => {
-          const catalogItem = catalogById.get(supplierCatalogId);
-          if (!catalogItem) throw new TRPCError({ code: "BAD_REQUEST", message: "Item não encontrado ou indisponível" });
-          const unitPrice = computePartnerOrderItemPrice(catalogItem.price, catalogItem.suggestedSalePrice, discountPercent);
+        const orderItems = input.items.map(({ source, id, quantity }) => {
+          if (source === "catalogo") {
+            const catalogItem = catalogById.get(id);
+            if (!catalogItem) throw new TRPCError({ code: "BAD_REQUEST", message: "Item não encontrado ou indisponível" });
+            const unitPrice = computePartnerOrderItemPrice(catalogItem.price, catalogItem.suggestedSalePrice, discountPercent);
+            return {
+              source: "catalogo" as const,
+              supplierCatalogId: id,
+              name: catalogItem.name,
+              quantity,
+              unitPrice,
+              totalPrice: unitPrice * quantity,
+            };
+          }
+          const stockItem = stockById.get(id);
+          if (!stockItem) throw new TRPCError({ code: "BAD_REQUEST", message: "Produto não encontrado ou sem estoque" });
+          if (quantity > stockItem.currentStock) {
+            throw new TRPCError({ code: "BAD_REQUEST", message: `Só há ${stockItem.currentStock} unidade(s) de "${stockItem.name}" em estoque` });
+          }
+          const unitPrice = computePartnerOrderItemPrice(stockItem.costPrice, stockItem.salePrice, 0);
           return {
-            supplierCatalogId,
-            name: catalogItem.name,
+            source: "estoque" as const,
+            productId: id,
+            name: stockItem.name,
             quantity,
             unitPrice,
             totalPrice: unitPrice * quantity,

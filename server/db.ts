@@ -342,7 +342,9 @@ export async function runStartupMigrations() {
       CREATE TABLE IF NOT EXISTS partnerOrderItems (
         id int AUTO_INCREMENT NOT NULL,
         partnerOrderId int NOT NULL,
-        supplierCatalogId int NOT NULL,
+        source enum('catalogo','estoque') NOT NULL DEFAULT 'catalogo',
+        supplierCatalogId int,
+        productId int,
         name varchar(255) NOT NULL,
         quantity int NOT NULL,
         unitPrice int NOT NULL,
@@ -353,6 +355,23 @@ export async function runStartupMigrations() {
     `);
   } catch (error: any) {
     console.error("[migrations] partnerOrderItems:", error);
+  }
+  // Colunas adicionadas depois — supplierCatalogId virou opcional (pedido
+  // pode ter só itens do estoque) e productId/source são novos.
+  try {
+    await db.execute(sql`ALTER TABLE partnerOrderItems MODIFY COLUMN supplierCatalogId int`);
+  } catch (error: any) {
+    console.error("[migrations] partnerOrderItems.supplierCatalogId nullable:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE partnerOrderItems ADD COLUMN productId int`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] partnerOrderItems.productId:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE partnerOrderItems ADD COLUMN source enum('catalogo','estoque') NOT NULL DEFAULT 'catalogo'`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] partnerOrderItems.source:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -956,6 +975,39 @@ export async function listPartnerVisibleProducts(terreiroId: number, tierId: num
     .orderBy(products.name);
 }
 
+// Igual a listPartnerVisibleProducts, mas inclui costPrice — usado só pelo
+// servidor pra calcular a trava de comissão mínima na tela "Gerar Pedidos"
+// (o costPrice nunca é devolvido pro parceiro).
+export async function listPartnerOrderableStockProducts(terreiroId: number, tierId: number | null) {
+  const db = await getDb();
+  if (!db) return [];
+  const tierJoinCondition = tierId ? eq(partnerTiers.id, tierId) : sql`false`;
+  return db
+    .select({
+      id: products.id,
+      name: products.name,
+      category: products.category,
+      salePrice: sql<number>`coalesce(${terreiroProductPrices.price}, ${tierPriceExpr(partnerTiers.discountPercent)})`,
+      costPrice: products.costPrice,
+      currentStock: products.currentStock,
+      imageUrl: products.imageUrl,
+    })
+    .from(products)
+    .leftJoin(partnerTiers, tierJoinCondition)
+    .leftJoin(
+      terreiroProductPrices,
+      and(eq(terreiroProductPrices.productId, products.id), eq(terreiroProductPrices.terreiroId, terreiroId))
+    )
+    .where(
+      and(
+        eq(products.isActive, 1),
+        gte(products.currentStock, 1),
+        or(isNotNull(partnerTiers.discountPercent), isNotNull(terreiroProductPrices.price))
+      )
+    )
+    .orderBy(products.name);
+}
+
 // Preços de um terreiro específico: todos os produtos ativos, com o preço do
 // plano dele (calculado a partir do desconto do plano) como referência e o
 // preço específico (se sobrescrito). Usado na página de gestão individual.
@@ -1282,7 +1334,15 @@ export async function listAvailableSupplierCatalogForOrders() {
 
 export async function createPartnerOrder(
   terreiroId: number,
-  items: { supplierCatalogId: number; name: string; quantity: number; unitPrice: number; totalPrice: number }[]
+  items: {
+    source: "catalogo" | "estoque";
+    supplierCatalogId?: number;
+    productId?: number;
+    name: string;
+    quantity: number;
+    unitPrice: number;
+    totalPrice: number;
+  }[]
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1292,7 +1352,9 @@ export async function createPartnerOrder(
   await db.insert(partnerOrderItems).values(
     items.map((item) => ({
       partnerOrderId: orderId,
-      supplierCatalogId: item.supplierCatalogId,
+      source: item.source,
+      supplierCatalogId: item.supplierCatalogId ?? null,
+      productId: item.productId ?? null,
       name: item.name,
       quantity: item.quantity,
       unitPrice: item.unitPrice,

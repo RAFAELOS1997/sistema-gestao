@@ -370,8 +370,10 @@ export type InsertPartnerOrder = typeof partnerOrders.$inferInsert;
 export const partnerOrderItems = mysqlTable("partnerOrderItems", {
   id: int("id").autoincrement().primaryKey(),
   partnerOrderId: int("partnerOrderId").notNull(),
-  supplierCatalogId: int("supplierCatalogId").notNull(),
-  name: varchar("name", { length: 255 }).notNull(), // snapshot — o item do catálogo pode mudar depois
+  source: mysqlEnum("source", ["catalogo", "estoque"]).notNull().default("catalogo"), // catalogo = fornecedor, estoque = produto já na loja
+  supplierCatalogId: int("supplierCatalogId"), // preenchido quando source = "catalogo"
+  productId: int("productId"), // preenchido quando source = "estoque"
+  name: varchar("name", { length: 255 }).notNull(), // snapshot — o item pode mudar depois
   quantity: int("quantity").notNull(),
   unitPrice: int("unitPrice").notNull(), // em centavos, já com desconto do plano + trava de 50%
   totalPrice: int("totalPrice").notNull(), // em centavos

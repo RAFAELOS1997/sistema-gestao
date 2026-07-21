@@ -77,6 +77,7 @@ export default function PartnerOrders() {
                     {order.items.map((item: any) => (
                       <p key={item.id}>
                         {item.quantity}x {item.name} — R$ {(item.totalPrice / 100).toFixed(2)}
+                        {item.source === "estoque" ? " (estoque)" : ""}
                       </p>
                     ))}
                   </div>
@@ -122,7 +123,9 @@ export default function PartnerOrders() {
                     <TableCell className="font-medium">#{order.id}</TableCell>
                     <TableCell className="text-muted-foreground">{order.terreiroName ?? "Parceiro removido"}</TableCell>
                     <TableCell className="text-muted-foreground text-sm max-w-xs">
-                      {order.items.map((item: any) => `${item.quantity}x ${item.name}`).join(", ")}
+                      {order.items
+                        .map((item: any) => `${item.quantity}x ${item.name}${item.source === "estoque" ? " (estoque)" : ""}`)
+                        .join(", ")}
                     </TableCell>
                     <TableCell className="font-semibold text-accent">R$ {(order.subtotal / 100).toFixed(2)}</TableCell>
                     <TableCell className="text-muted-foreground text-sm">

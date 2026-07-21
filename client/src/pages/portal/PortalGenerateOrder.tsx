@@ -7,6 +7,8 @@ import { trpc } from "@/lib/trpc";
 import { Search, Plus, Minus, ChevronDown, ChevronUp, ShoppingCart, Package } from "lucide-react";
 import { toast } from "sonner";
 
+type Source = "catalogo" | "estoque";
+
 const CATEGORY_LABELS: Record<string, string> = {
   guias: "Guias",
   pulseiras: "Pulseiras",
@@ -35,18 +37,32 @@ const STATUS_COLORS: Record<string, string> = {
   cancelado: "bg-red-900/30 text-red-200",
 };
 
+const cartKey = (source: Source, id: number) => `${source}:${id}`;
+
 export default function PortalGenerateOrder() {
+  const [source, setSource] = useState<Source>("catalogo");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("todas");
-  const [cart, setCart] = useState<Record<number, number>>({});
+  const [cart, setCart] = useState<Record<string, { source: Source; id: number; quantity: number }>>({});
   const [cartExpanded, setCartExpanded] = useState(false);
 
   const utils = trpc.useUtils();
-  const catalogQuery = trpc.portal.orderCatalog.list.useQuery();
+  const catalogQuery = trpc.portal.orderCatalog.catalog.useQuery();
+  const stockQuery = trpc.portal.orderCatalog.stock.useQuery();
   const minimumQuery = trpc.portal.orders.minimumCents.useQuery();
   const ordersQuery = trpc.portal.orders.list.useQuery();
-  const items = catalogQuery.data ?? [];
   const minimumCents = minimumQuery.data ?? 15000;
+
+  const items = source === "catalogo" ? catalogQuery.data ?? [] : stockQuery.data ?? [];
+  const isLoading = source === "catalogo" ? catalogQuery.isLoading : stockQuery.isLoading;
+  // Índice combinado das duas fontes — usado pra montar o carrinho mesmo
+  // trocando de aba (o carrinho é compartilhado entre Catálogo e Estoque).
+  const allItemsById = useMemo(() => {
+    const map = new Map<string, { id: number; name: string; price: number }>();
+    for (const i of catalogQuery.data ?? []) map.set(cartKey("catalogo", i.id), i);
+    for (const i of stockQuery.data ?? []) map.set(cartKey("estoque", i.id), i);
+    return map;
+  }, [catalogQuery.data, stockQuery.data]);
 
   const createOrderMutation = trpc.portal.orders.create.useMutation({
     onSuccess: () => {
@@ -69,24 +85,25 @@ export default function PortalGenerateOrder() {
   }, [items, search, category]);
 
   const cartItems = useMemo(() => {
-    return Object.entries(cart)
-      .map(([id, quantity]) => {
-        const item = items.find((i) => i.id === Number(id));
-        if (!item || quantity <= 0) return null;
-        return { ...item, quantity, total: item.price * quantity };
+    return Object.values(cart)
+      .map((entry) => {
+        const item = allItemsById.get(cartKey(entry.source, entry.id));
+        if (!item || entry.quantity <= 0) return null;
+        return { ...entry, name: item.name, price: item.price, total: item.price * entry.quantity };
       })
       .filter((i): i is NonNullable<typeof i> => i !== null);
-  }, [cart, items]);
+  }, [cart, allItemsById]);
 
   const subtotal = cartItems.reduce((sum, i) => sum + i.total, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
   const missingForMinimum = Math.max(0, minimumCents - subtotal);
 
-  const setQuantity = (id: number, quantity: number) => {
+  const setQuantity = (itemSource: Source, id: number, quantity: number) => {
     setCart((prev) => {
       const next = { ...prev };
-      if (quantity <= 0) delete next[id];
-      else next[id] = quantity;
+      const key = cartKey(itemSource, id);
+      if (quantity <= 0) delete next[key];
+      else next[key] = { source: itemSource, id, quantity };
       return next;
     });
   };
@@ -101,7 +118,7 @@ export default function PortalGenerateOrder() {
       return;
     }
     createOrderMutation.mutate({
-      items: cartItems.map((i) => ({ supplierCatalogId: i.id, quantity: i.quantity })),
+      items: cartItems.map((i) => ({ source: i.source, id: i.id, quantity: i.quantity })),
     });
   };
 
@@ -112,6 +129,24 @@ export default function PortalGenerateOrder() {
         <p className="text-muted-foreground text-sm">
           Monte seu pedido com o preço do seu plano já aplicado. Pedido mínimo: R$ {(minimumCents / 100).toFixed(2)}
         </p>
+      </div>
+
+      {/* Fonte: catálogo do fornecedor ou estoque da loja */}
+      <div className="flex gap-2 border-b border-border">
+        {([
+          { key: "catalogo" as const, label: "Catálogo do Fornecedor" },
+          { key: "estoque" as const, label: "Estoque da Loja" },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => { setSource(tab.key); setCategory("todas"); }}
+            className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
+              source === tab.key ? "border-accent text-accent" : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-col gap-3">
@@ -147,14 +182,14 @@ export default function PortalGenerateOrder() {
         </div>
       </div>
 
-      {catalogQuery.isLoading ? (
+      {isLoading ? (
         <div className="text-center py-10 text-muted-foreground text-sm">Carregando produtos...</div>
       ) : filtered.length === 0 ? (
         <div className="text-center py-10 text-muted-foreground text-sm">Nenhum produto encontrado</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {filtered.map((item) => {
-            const qty = cart[item.id] ?? 0;
+            const qty = cart[cartKey(source, item.id)]?.quantity ?? 0;
             return (
               <div key={item.id} className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
                 <div className="aspect-square bg-background flex items-center justify-center text-muted-foreground text-xs overflow-hidden">
@@ -171,7 +206,7 @@ export default function PortalGenerateOrder() {
                   <p className="text-base sm:text-lg font-bold mt-1 text-accent">R$ {(item.price / 100).toFixed(2)}</p>
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-border">
                     <button
-                      onClick={() => setQuantity(item.id, qty - 1)}
+                      onClick={() => setQuantity(source, item.id, qty - 1)}
                       disabled={qty === 0}
                       className="p-1.5 rounded bg-background border border-border text-accent disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/10 transition-colors"
                     >
@@ -179,7 +214,7 @@ export default function PortalGenerateOrder() {
                     </button>
                     <span className="text-base font-bold text-foreground">{qty}</span>
                     <button
-                      onClick={() => setQuantity(item.id, qty + 1)}
+                      onClick={() => setQuantity(source, item.id, qty + 1)}
                       className="p-1.5 rounded bg-accent text-accent-foreground hover:bg-accent/90 transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
@@ -252,14 +287,17 @@ export default function PortalGenerateOrder() {
                 <CardContent className="space-y-3 pt-0 border-t border-border max-h-[50vh] overflow-y-auto">
                   <div className="space-y-2 pt-3">
                     {cartItems.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-2 p-2 bg-background rounded border border-border">
-                        <p className="text-sm text-foreground flex-1 truncate">{item.name}</p>
+                      <div key={cartKey(item.source, item.id)} className="flex items-center justify-between gap-2 p-2 bg-background rounded border border-border">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-foreground truncate">{item.name}</p>
+                          <p className="text-[10px] text-muted-foreground">{item.source === "estoque" ? "Estoque da loja" : "Fornecedor"}</p>
+                        </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => setQuantity(item.id, item.quantity - 1)} className="p-1 hover:bg-accent/20 rounded">
+                          <button onClick={() => setQuantity(item.source, item.id, item.quantity - 1)} className="p-1 hover:bg-accent/20 rounded">
                             <Minus className="w-3 h-3 text-accent" />
                           </button>
                           <span className="w-6 text-center text-sm text-foreground font-semibold">{item.quantity}</span>
-                          <button onClick={() => setQuantity(item.id, item.quantity + 1)} className="p-1 hover:bg-accent/20 rounded">
+                          <button onClick={() => setQuantity(item.source, item.id, item.quantity + 1)} className="p-1 hover:bg-accent/20 rounded">
                             <Plus className="w-3 h-3 text-accent" />
                           </button>
                         </div>
