@@ -1189,7 +1189,7 @@ const computePartnerOrderItemPrice = (costCents: number, suggestedSalePriceCents
   return Math.max(tierPrice, minPrice);
 };
 
-const PARTNER_ORDER_MINIMUM_CENTS = 15000; // R$ 150 (a compra mínima do fornecedor pra loja é R$ 300)
+const ORDER_MINIMUM_CENTS = 15000; // R$ 150 (a compra mínima do fornecedor pra loja é R$ 300)
 
 // Preço da aba "Fazer Pedidos" do catálogo público: preço cheio + 5% (sem
 // desconto nenhum, é o visitante comum, não um parceiro) — ainda travado no
@@ -1742,7 +1742,7 @@ const portalRouter = router({
   }),
 
   orders: router({
-    minimumCents: terreiroProcedure.query(() => PARTNER_ORDER_MINIMUM_CENTS),
+    minimumCents: terreiroProcedure.query(() => ORDER_MINIMUM_CENTS),
 
     list: terreiroProcedure.query(({ ctx }) => listPartnerOrdersForTerreiro(ctx.terreiro.id)),
 
@@ -1801,10 +1801,10 @@ const portalRouter = router({
         });
 
         const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
-        if (subtotal < PARTNER_ORDER_MINIMUM_CENTS) {
+        if (subtotal < ORDER_MINIMUM_CENTS) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: `Pedido mínimo de R$ ${(PARTNER_ORDER_MINIMUM_CENTS / 100).toFixed(2)} — faltam R$ ${((PARTNER_ORDER_MINIMUM_CENTS - subtotal) / 100).toFixed(2)}`,
+            message: `Pedido mínimo de R$ ${(ORDER_MINIMUM_CENTS / 100).toFixed(2)} — faltam R$ ${((ORDER_MINIMUM_CENTS - subtotal) / 100).toFixed(2)}`,
           });
         }
 
@@ -1866,6 +1866,8 @@ const publicStoreRouter = router({
   }),
 
   orders: router({
+    minimumCents: publicProcedure.query(() => ORDER_MINIMUM_CENTS),
+
     create: publicProcedure
       .input(
         z.object({
@@ -1920,6 +1922,13 @@ const publicStoreRouter = router({
         });
 
         const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+        if (subtotal < ORDER_MINIMUM_CENTS) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Pedido mínimo de R$ ${(ORDER_MINIMUM_CENTS / 100).toFixed(2)} — faltam R$ ${((ORDER_MINIMUM_CENTS - subtotal) / 100).toFixed(2)}`,
+          });
+        }
+
         const order = await createPublicOrder(input.customerName, input.customerPhone, orderItems);
         return { success: true, orderId: order.id, subtotal };
       }),

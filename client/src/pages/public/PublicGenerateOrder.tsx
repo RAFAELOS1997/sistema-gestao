@@ -39,6 +39,8 @@ export default function PublicGenerateOrder() {
 
   const catalogQuery = trpc.publicStore.orderCatalog.catalog.useQuery();
   const stockQuery = trpc.publicStore.orderCatalog.stock.useQuery();
+  const minimumQuery = trpc.publicStore.orders.minimumCents.useQuery();
+  const minimumCents = minimumQuery.data ?? 15000;
 
   const items = source === "catalogo" ? catalogQuery.data ?? [] : stockQuery.data ?? [];
   const isLoading = source === "catalogo" ? catalogQuery.isLoading : stockQuery.isLoading;
@@ -80,10 +82,15 @@ export default function PublicGenerateOrder() {
 
   const subtotal = cartItems.reduce((sum, i) => sum + i.total, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
+  const missingForMinimum = Math.max(0, minimumCents - subtotal);
 
   const handleSubmit = () => {
     if (cartItems.length === 0) {
       toast.error("Adicione ao menos um item ao pedido");
+      return;
+    }
+    if (subtotal < minimumCents) {
+      toast.error(`Pedido mínimo de R$ ${(minimumCents / 100).toFixed(2)}`);
       return;
     }
     if (!customerName.trim() || !customerPhone.trim()) {
@@ -121,7 +128,9 @@ export default function PublicGenerateOrder() {
     <div className="space-y-5 sm:space-y-6 pb-24">
       <div>
         <h1 className="text-xl sm:text-3xl font-bold text-foreground">Fazer Pedido</h1>
-        <p className="text-muted-foreground text-sm">Monte seu pedido e a gente confirma com você por telefone</p>
+        <p className="text-muted-foreground text-sm">
+          Monte seu pedido e a gente confirma com você por telefone. Pedido mínimo: R$ {(minimumCents / 100).toFixed(2)}
+        </p>
       </div>
 
       <div className="flex gap-2 border-b border-border">
@@ -288,9 +297,14 @@ export default function PublicGenerateOrder() {
               )}
 
               <div className="px-4 pb-4">
+                {missingForMinimum > 0 ? (
+                  <p className="text-xs text-amber-400 mb-2 text-center">
+                    Faltam R$ {(missingForMinimum / 100).toFixed(2)} pra atingir o pedido mínimo de R$ {(minimumCents / 100).toFixed(2)}
+                  </p>
+                ) : null}
                 <Button
                   className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-                  disabled={createOrderMutation.isPending}
+                  disabled={missingForMinimum > 0 || createOrderMutation.isPending}
                   onClick={() => { setCartExpanded(true); handleSubmit(); }}
                 >
                   {createOrderMutation.isPending ? "Enviando..." : "Enviar Pedido"}

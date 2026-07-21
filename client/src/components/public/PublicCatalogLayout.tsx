@@ -10,26 +10,42 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card sticky top-0 z-40">
-        <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-6 h-14 sm:h-16 max-w-6xl mx-auto">
-          <img src="/logo.jpeg" alt="Toca da Pantera" className="h-9 w-9 sm:h-10 sm:w-10 rounded-lg object-cover shrink-0" />
-          <p className="font-bold tracking-tight text-accent text-sm sm:text-base leading-none">Toca da Pantera</p>
+      {/* Hero */}
+      <header className="relative overflow-hidden border-b border-border">
+        <div className="absolute inset-0 bg-gradient-to-b from-accent/25 via-accent/5 to-transparent pointer-events-none" />
+        <div
+          className="absolute inset-0 pointer-events-none opacity-40"
+          style={{ background: "radial-gradient(circle at 50% -10%, var(--accent) 0%, transparent 55%)" }}
+        />
+        <div className="relative max-w-5xl mx-auto px-4 pt-8 pb-6 sm:pt-12 sm:pb-8 flex flex-col items-center text-center">
+          <img
+            src="/logo.jpeg"
+            alt="Toca da Pantera"
+            className="h-24 w-24 sm:h-32 sm:w-32 rounded-2xl object-cover shadow-2xl shadow-accent/30 ring-4 ring-accent/40"
+          />
+          <h1 className="mt-4 text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
+            Toca da <span className="text-accent">Pantera</span>
+          </h1>
+          <p className="mt-2 text-sm sm:text-base text-muted-foreground max-w-md">
+            Artigos umbandistas e religiosos — confira nossos produtos e faça seu pedido direto pelo site
+          </p>
+
+          <nav className="mt-6 inline-flex gap-1 p-1 rounded-full bg-card border border-border shadow-lg">
+            {NAV_ITEMS.map((item) => (
+              <button
+                key={item.path}
+                onClick={() => setLocation(item.path)}
+                className={`px-5 sm:px-6 py-2.5 rounded-full text-sm font-semibold transition-colors ${
+                  location === item.path
+                    ? "bg-accent text-accent-foreground shadow"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
         </div>
-        <nav className="max-w-6xl mx-auto px-2 sm:px-6 flex gap-1 -mb-px">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.path}
-              onClick={() => setLocation(item.path)}
-              className={`flex-1 sm:flex-none text-center px-3 py-3 sm:py-2 text-sm border-b-2 transition-colors ${
-                location === item.path
-                  ? "border-accent text-accent font-medium"
-                  : "border-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
-        </nav>
       </header>
       <main className="max-w-6xl mx-auto p-3 sm:p-6">{children}</main>
     </div>
