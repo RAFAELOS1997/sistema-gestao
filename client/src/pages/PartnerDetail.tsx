@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Power } from "lucide-react";
+import { ArrowLeft, Power, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import ConsignmentManager from "@/components/ConsignmentManager";
@@ -96,6 +96,11 @@ export default function PartnerDetail() {
     onError: (error) => toast.error(`Erro: ${error.message}`),
   });
 
+  const impersonateMutation = trpc.terreiros.impersonate.useMutation({
+    onSuccess: () => window.open("/parceiros/produtos", "_blank"),
+    onError: (error) => toast.error(`Erro ao acessar o portal: ${error.message}`),
+  });
+
   const handleSaveInfo = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name || !form.username) {
@@ -135,10 +140,19 @@ export default function PartnerDetail() {
             Voltar
           </Button>
         </Link>
-        <div>
+        <div className="flex-1">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">{terreiro.name}</h1>
           <p className="text-muted-foreground text-sm">Gestão individual do terreiro parceiro</p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => impersonateMutation.mutate({ id: terreiroId })}
+          disabled={impersonateMutation.isPending}
+        >
+          <ExternalLink className="w-4 h-4 mr-2" />
+          Acessar Portal como esse Parceiro
+        </Button>
       </div>
 
       <Card>

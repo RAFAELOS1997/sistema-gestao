@@ -87,6 +87,11 @@ import {
   markInfinitePayChargePaid,
   listPaymentMethods,
   updatePaymentMethod,
+  listAvailableSupplierCatalogForOrders,
+  createPartnerOrder,
+  listPartnerOrdersForTerreiro,
+  listAllPartnerOrders,
+  updatePartnerOrderStatus,
 } from "./db";
 
 // O hash de senha (scrypt) nunca deve sair do servidor — sem isso, auth.me e
@@ -1167,6 +1172,20 @@ const suggestSalePrice = (costCents: number) => {
   return Math.round(costCents * 1.8);
 };
 
+// Preço de um item do fornecedor pro parceiro montar o pedido: parte do
+// preço de venda sugerido, aplica o desconto do plano dele e trava num
+// mínimo de custo×1,5 — comissão nunca pode ficar abaixo de 50%, mesmo que
+// o desconto do plano (até 20% no Diamante) empurraria o preço mais baixo.
+const MIN_PARTNER_ORDER_MARGIN_MULT = 1.5;
+const computePartnerOrderItemPrice = (costCents: number, suggestedSalePriceCents: number | null, discountPercent: number) => {
+  const baseSalePrice = suggestedSalePriceCents ?? suggestSalePrice(costCents);
+  const tierPrice = Math.round(baseSalePrice * (1 - discountPercent / 100));
+  const minPrice = Math.ceil(costCents * MIN_PARTNER_ORDER_MARGIN_MULT);
+  return Math.max(tierPrice, minPrice);
+};
+
+const PARTNER_ORDER_MINIMUM_CENTS = 15000; // R$ 150 (a compra mínima do fornecedor pra loja é R$ 300)
+
 const supplierCatalogRouter = router({
   list: protectedProcedure
     .input(z.object({ supplierId: z.number().int().positive().optional() }))
@@ -1528,6 +1547,20 @@ const terreirosRouter = router({
       return { success: true };
     }),
 
+  // Loga o admin no Portal do Parceiro como esse terreiro (cookie próprio,
+  // não mexe na sessão do admin) — pra poder ver/testar tudo exatamente
+  // como o parceiro vê, sem precisar saber a senha dele.
+  impersonate: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      const terreiro = await getTerreiroById(input.id);
+      if (!terreiro) throw new TRPCError({ code: "NOT_FOUND", message: "Terreiro não encontrado" });
+      const sessionToken = await signTerreiroSession(terreiro.id);
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(TERREIRO_COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      return { success: true };
+    }),
+
   // Preço específico de um terreiro — sobrescreve o preço do plano dele
   // só pra esse produto (ex: negociação pontual com aquele parceiro).
   prices: router({
@@ -1657,6 +1690,71 @@ const portalRouter = router({
       .input(z.object({ includeSettled: z.boolean().optional() }).optional())
       .query(({ ctx, input }) => listConsignments(ctx.terreiro.id, input?.includeSettled ?? false)),
   }),
+
+  // Tela "Gerar Pedidos": catálogo do fornecedor já com o preço do plano do
+  // parceiro aplicado (e travado num mínimo de 50% de comissão) — nunca
+  // devolve supplierId/sourceUrl/sourceSlug, o parceiro não pode saber quem
+  // é o fornecedor.
+  orderCatalog: router({
+    list: terreiroProcedure.query(async ({ ctx }) => {
+      const discountPercent = ctx.terreiro.tierId
+        ? (await getPartnerTierById(ctx.terreiro.tierId))?.discountPercent ?? 0
+        : 0;
+      const items = await listAvailableSupplierCatalogForOrders();
+      return items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        category: item.category,
+        // Nunca a URL real do fornecedor — sempre pelo nosso proxy de imagem.
+        imageUrl: item.imageUrl ? `/api/catalog-image/${item.id}` : null,
+        price: computePartnerOrderItemPrice(item.price, item.suggestedSalePrice, discountPercent),
+      }));
+    }),
+  }),
+
+  orders: router({
+    minimumCents: terreiroProcedure.query(() => PARTNER_ORDER_MINIMUM_CENTS),
+
+    list: terreiroProcedure.query(({ ctx }) => listPartnerOrdersForTerreiro(ctx.terreiro.id)),
+
+    create: terreiroProcedure
+      .input(
+        z.object({
+          items: z.array(z.object({ supplierCatalogId: z.number().int().positive(), quantity: z.number().int().positive() })).min(1),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const discountPercent = ctx.terreiro.tierId
+          ? (await getPartnerTierById(ctx.terreiro.tierId))?.discountPercent ?? 0
+          : 0;
+        const catalogItems = await listAvailableSupplierCatalogForOrders();
+        const catalogById = new Map(catalogItems.map((i) => [i.id, i]));
+
+        const orderItems = input.items.map(({ supplierCatalogId, quantity }) => {
+          const catalogItem = catalogById.get(supplierCatalogId);
+          if (!catalogItem) throw new TRPCError({ code: "BAD_REQUEST", message: "Item não encontrado ou indisponível" });
+          const unitPrice = computePartnerOrderItemPrice(catalogItem.price, catalogItem.suggestedSalePrice, discountPercent);
+          return {
+            supplierCatalogId,
+            name: catalogItem.name,
+            quantity,
+            unitPrice,
+            totalPrice: unitPrice * quantity,
+          };
+        });
+
+        const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+        if (subtotal < PARTNER_ORDER_MINIMUM_CENTS) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Pedido mínimo de R$ ${(PARTNER_ORDER_MINIMUM_CENTS / 100).toFixed(2)} — faltam R$ ${((PARTNER_ORDER_MINIMUM_CENTS - subtotal) / 100).toFixed(2)}`,
+          });
+        }
+
+        const order = await createPartnerOrder(ctx.terreiro.id, orderItems);
+        return { success: true, orderId: order.id, subtotal: order.subtotal };
+      }),
+  }),
 });
 
 // ─── Planos de Parceria (Cobre/Bronze/Prata/Ouro/Diamante) ────────────────────
@@ -1678,6 +1776,28 @@ const partnerTiersRouter = router({
         action: "partner_tier_updated",
         module: "partners",
         description: `Desconto do plano ID ${input.id} alterado para ${input.discountPercent}%`,
+      });
+      return { success: true };
+    }),
+});
+
+// ─── Pedidos de Parceiros (visão do admin) ─────────────────────────────────────
+// O que os terreiros pediram pela tela "Gerar Pedidos" do Portal — pra
+// confirmar, marcar como entregue depois que fizer a compra no fornecedor e
+// entregar, ou cancelar.
+
+const partnerOrdersRouter = router({
+  list: protectedProcedure.query(() => listAllPartnerOrders()),
+
+  updateStatus: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), status: z.enum(["pendente", "confirmado", "entregue", "cancelado"]) }))
+    .mutation(async ({ input, ctx }) => {
+      await updatePartnerOrderStatus(input.id, input.status);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "partner_order_status_updated",
+        module: "partners",
+        description: `Pedido de parceiro ID ${input.id} marcado como "${input.status}"`,
       });
       return { success: true };
     }),
@@ -1762,6 +1882,7 @@ export const appRouter = router({
   terreiros: terreirosRouter,
   portal: portalRouter,
   partnerTiers: partnerTiersRouter,
+  partnerOrders: partnerOrdersRouter,
   infinitePay: infinitePayRouter,
   paymentMethods: paymentMethodsRouter,
 });

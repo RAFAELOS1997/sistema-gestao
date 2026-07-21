@@ -11,6 +11,7 @@ import {
   consignments,
   infinitePayCharges, InsertInfinitePayCharge,
   paymentMethods,
+  partnerOrders, partnerOrderItems,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -317,6 +318,41 @@ export async function runStartupMigrations() {
     await db.execute(sql`ALTER TABLE sales ADD COLUMN terreiroId int`);
   } catch (error: any) {
     if (!isDupColumn(error)) console.error("[migrations] sales.terreiroId:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS partnerOrders (
+        id int AUTO_INCREMENT NOT NULL,
+        terreiroId int NOT NULL,
+        subtotal int NOT NULL,
+        status enum('pendente','confirmado','entregue','cancelado') NOT NULL DEFAULT 'pendente',
+        notes text,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] partnerOrders:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS partnerOrderItems (
+        id int AUTO_INCREMENT NOT NULL,
+        partnerOrderId int NOT NULL,
+        supplierCatalogId int NOT NULL,
+        name varchar(255) NOT NULL,
+        quantity int NOT NULL,
+        unitPrice int NOT NULL,
+        totalPrice int NOT NULL,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        PRIMARY KEY (id)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] partnerOrderItems:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -1220,6 +1256,96 @@ export async function markConsignmentReturned(id: number, quantity: number) {
     .update(products)
     .set({ currentStock: sql`${products.currentStock} + ${quantity}` })
     .where(eq(products.id, consignment.productId));
+}
+
+// ─── Pedidos de Parceiros (tela "Gerar Pedidos" do Portal) ────────────────────
+
+// Itens disponíveis do catálogo do fornecedor pro parceiro montar o pedido —
+// só as colunas necessárias pro preço, NUNCA supplierId/sourceUrl/sourceSlug
+// (o parceiro não pode saber quem é nem onde fica o fornecedor).
+export async function listAvailableSupplierCatalogForOrders() {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({
+      id: supplierCatalog.id,
+      name: supplierCatalog.name,
+      category: supplierCatalog.category,
+      imageUrl: supplierCatalog.imageUrl,
+      price: supplierCatalog.price, // custo — usado só pro cálculo server-side, nunca devolvido pro parceiro
+      suggestedSalePrice: supplierCatalog.suggestedSalePrice,
+    })
+    .from(supplierCatalog)
+    .where(eq(supplierCatalog.stockStatus, "disponivel"))
+    .orderBy(supplierCatalog.name);
+}
+
+export async function createPartnerOrder(
+  terreiroId: number,
+  items: { supplierCatalogId: number; name: string; quantity: number; unitPrice: number; totalPrice: number }[]
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const orderResult = await db.insert(partnerOrders).values({ terreiroId, subtotal, status: "pendente" });
+  const orderId = ((orderResult as any)[0]?.insertId ?? (orderResult as any).insertId) as number;
+  await db.insert(partnerOrderItems).values(
+    items.map((item) => ({
+      partnerOrderId: orderId,
+      supplierCatalogId: item.supplierCatalogId,
+      name: item.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice: item.totalPrice,
+    }))
+  );
+  return { id: orderId, subtotal };
+}
+
+export async function listPartnerOrdersForTerreiro(terreiroId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const orders = await db
+    .select()
+    .from(partnerOrders)
+    .where(eq(partnerOrders.terreiroId, terreiroId))
+    .orderBy(desc(partnerOrders.createdAt));
+  const items = await db.select().from(partnerOrderItems);
+  return orders.map((order) => ({
+    ...order,
+    items: items.filter((i) => i.partnerOrderId === order.id),
+  }));
+}
+
+// Visão do admin: todos os pedidos de todos os parceiros, mais recentes primeiro.
+export async function listAllPartnerOrders() {
+  const db = await getDb();
+  if (!db) return [];
+  const orders = await db
+    .select({
+      id: partnerOrders.id,
+      terreiroId: partnerOrders.terreiroId,
+      terreiroName: terreiros.name,
+      subtotal: partnerOrders.subtotal,
+      status: partnerOrders.status,
+      notes: partnerOrders.notes,
+      createdAt: partnerOrders.createdAt,
+      updatedAt: partnerOrders.updatedAt,
+    })
+    .from(partnerOrders)
+    .leftJoin(terreiros, eq(terreiros.id, partnerOrders.terreiroId))
+    .orderBy(desc(partnerOrders.createdAt));
+  const items = await db.select().from(partnerOrderItems);
+  return orders.map((order) => ({
+    ...order,
+    items: items.filter((i) => i.partnerOrderId === order.id),
+  }));
+}
+
+export async function updatePartnerOrderStatus(id: number, status: "pendente" | "confirmado" | "entregue" | "cancelado") {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(partnerOrders).set({ status }).where(eq(partnerOrders.id, id));
 }
 
 // ─── Cobranças InfinitePay ─────────────────────────────────────────────────────

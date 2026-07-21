@@ -345,3 +345,38 @@ export const consignments = mysqlTable("consignments", {
 
 export type Consignment = typeof consignments.$inferSelect;
 export type InsertConsignment = typeof consignments.$inferInsert;
+
+// ─── Pedidos de Parceiros (tela "Gerar Pedidos" do Portal) ────────────────────
+// O terreiro monta o pedido escolhendo itens do catálogo do fornecedor (sem
+// nunca ver quem é o fornecedor ou o link do site dele) já com o preço do
+// plano dele aplicado. O preço de cada item é sempre recalculado no servidor
+// na hora de criar o pedido (nunca confia no preço vindo do cliente) e nunca
+// fica abaixo de custo×1,5 (comissão mínima de 50%), mesmo que o desconto do
+// plano permitiria um preço menor.
+
+export const partnerOrders = mysqlTable("partnerOrders", {
+  id: int("id").autoincrement().primaryKey(),
+  terreiroId: int("terreiroId").notNull(),
+  subtotal: int("subtotal").notNull(), // em centavos
+  status: mysqlEnum("status", ["pendente", "confirmado", "entregue", "cancelado"]).notNull().default("pendente"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PartnerOrder = typeof partnerOrders.$inferSelect;
+export type InsertPartnerOrder = typeof partnerOrders.$inferInsert;
+
+export const partnerOrderItems = mysqlTable("partnerOrderItems", {
+  id: int("id").autoincrement().primaryKey(),
+  partnerOrderId: int("partnerOrderId").notNull(),
+  supplierCatalogId: int("supplierCatalogId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(), // snapshot — o item do catálogo pode mudar depois
+  quantity: int("quantity").notNull(),
+  unitPrice: int("unitPrice").notNull(), // em centavos, já com desconto do plano + trava de 50%
+  totalPrice: int("totalPrice").notNull(), // em centavos
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type PartnerOrderItem = typeof partnerOrderItems.$inferSelect;
+export type InsertPartnerOrderItem = typeof partnerOrderItems.$inferInsert;

@@ -15,6 +15,8 @@ import PartnerTiers from "./pages/PartnerTiers";
 import PortalConsignments from "./pages/portal/PortalConsignments";
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalProducts from "./pages/portal/PortalProducts";
+import PortalGenerateOrder from "./pages/portal/PortalGenerateOrder";
+import PartnerOrders from "./pages/PartnerOrders";
 import PriceReview from "./pages/PriceReview";
 import SupplierCatalog from "./pages/SupplierCatalog";
 import AuditPedido7335 from "./pages/AuditPedido7335";
@@ -113,6 +115,11 @@ function Router() {
           <PartnerTiers />
         </DashboardLayout>
       </Route>
+      <Route path="/pedidos-parceiros">
+        <DashboardLayout>
+          <PartnerOrders />
+        </DashboardLayout>
+      </Route>
 
       {/* Portal do Parceiro — login e área separados dos usuários do sistema */}
       <Route path="/parceiros" component={() => <Redirect to="/parceiros/produtos" />} />
@@ -120,6 +127,11 @@ function Router() {
       <Route path="/parceiros/produtos">
         <PortalLayout>
           <PortalProducts />
+        </PortalLayout>
+      </Route>
+      <Route path="/parceiros/pedidos">
+        <PortalLayout>
+          <PortalGenerateOrder />
         </PortalLayout>
       </Route>
       <Route path="/parceiros/comodato">

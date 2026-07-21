@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 
 const NAV_ITEMS = [
   { label: "Produtos", path: "/parceiros/produtos" },
+  { label: "Gerar Pedidos", path: "/parceiros/pedidos" },
   { label: "Comodato", path: "/parceiros/comodato" },
 ];
 
