@@ -232,6 +232,10 @@ export default function PublicPartnership() {
                 </li>
               ))}
             </ul>
+            <p className="text-xs text-muted-foreground pt-1 border-t border-border">
+              Conta tudo que você pedir pela tela "Fazer Pedidos" — tanto o catálogo do fornecedor quanto o
+              estoque da loja. Compras feitas direto no balcão não entram nessa conta.
+            </p>
           </CardContent>
         </Card>
       </div>
