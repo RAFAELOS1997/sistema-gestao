@@ -10,6 +10,7 @@ import {
   terreiroProductPrices,
   consignments,
   infinitePayCharges, InsertInfinitePayCharge,
+  paymentMethods,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 
@@ -287,6 +288,29 @@ export async function runStartupMigrations() {
     `);
   } catch (error: any) {
     console.error("[migrations] infinitePayCharges:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS paymentMethods (
+        id int AUTO_INCREMENT NOT NULL,
+        \`key\` varchar(50) NOT NULL,
+        label varchar(100) NOT NULL,
+        enabled int NOT NULL DEFAULT 1,
+        sortOrder int NOT NULL DEFAULT 0,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        UNIQUE KEY paymentMethods_key_unique (\`key\`)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] paymentMethods:", error);
+  }
+  try {
+    await seedPaymentMethods();
+  } catch (error: any) {
+    console.error("[migrations] seedPaymentMethods:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -973,6 +997,49 @@ export async function updatePartnerTierDiscount(id: number, discountPercent: num
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(partnerTiers).set({ discountPercent }).where(eq(partnerTiers.id, id));
+}
+
+// ─── Formas de pagamento nativas ────────────────────────────────────────────
+
+export const NATIVE_PAYMENT_METHODS = [
+  { key: "dinheiro", label: "Dinheiro", sortOrder: 1 },
+  { key: "pix", label: "PIX", sortOrder: 2 },
+  { key: "debito", label: "Cartão de Débito", sortOrder: 3 },
+  { key: "credito", label: "Cartão de Crédito", sortOrder: 4 },
+  { key: "cheque", label: "Cheque", sortOrder: 5 },
+] as const;
+
+// Garante que as 5 formas nativas existam — chamado no boot. Não mexe em
+// label/enabled já ajustados pelo admin, só cria o que faltar e corrige a
+// ordem.
+export async function seedPaymentMethods() {
+  const db = await getDb();
+  if (!db) return;
+  const existing = await db.select().from(paymentMethods);
+  const byKey = new Map(existing.map((m) => [m.key, m]));
+  for (const method of NATIVE_PAYMENT_METHODS) {
+    const current = byKey.get(method.key);
+    if (!current) {
+      await db.insert(paymentMethods).values(method);
+    } else if (current.sortOrder !== method.sortOrder) {
+      await db.update(paymentMethods).set({ sortOrder: method.sortOrder }).where(eq(paymentMethods.id, current.id));
+    }
+  }
+}
+
+export async function listPaymentMethods() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(paymentMethods).orderBy(paymentMethods.sortOrder);
+}
+
+export async function updatePaymentMethod(id: number, data: { label?: string; enabled?: boolean }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const set: { label?: string; enabled?: number } = {};
+  if (data.label !== undefined) set.label = data.label;
+  if (data.enabled !== undefined) set.enabled = data.enabled ? 1 : 0;
+  await db.update(paymentMethods).set(set).where(eq(paymentMethods.id, id));
 }
 
 // ─── Comodato (itens deixados nos terreiros) ──────────────────────────────────

@@ -79,6 +79,7 @@ export default function Sales() {
   const terreirosQuery = trpc.terreiros.list.useQuery(undefined, { enabled: channel === "terreiro" });
   const partnerTiersQuery = trpc.partnerTiers.list.useQuery(undefined, { enabled: channel === "terreiro" });
   const infinitePayHandleQuery = trpc.infinitePay.getHandle.useQuery();
+  const paymentMethodsQuery = trpc.paymentMethods.list.useQuery();
   const infinitePayHandle = infinitePayHandleQuery.data?.handle ?? null;
   const createChargeMutation = trpc.infinitePay.createCharge.useMutation();
   const chargeStatusQuery = trpc.infinitePay.checkChargeStatus.useQuery(
@@ -746,23 +747,13 @@ export default function Sales() {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border">
-                      <SelectItem value="dinheiro" className="text-foreground">
-                        Dinheiro
-                      </SelectItem>
-                      <SelectItem value="pix" className="text-foreground">
-                        PIX
-                      </SelectItem>
-                      <SelectItem value="debito" className="text-foreground">
-                        Cartão de Débito
-                      </SelectItem>
-                      <SelectItem value="credito" className="text-foreground">
-                        Cartão de Crédito
-                      </SelectItem>
-                      <SelectItem value="cheque" className="text-foreground">
-                        Cheque
-                      </SelectItem>
+                      {(paymentMethodsQuery.data ?? []).filter((m) => m.enabled).map((m) => (
+                        <SelectItem key={m.key} value={m.key} className="text-foreground">
+                          {m.label}
+                        </SelectItem>
+                      ))}
                       <SelectItem value="infinitepay" className="text-foreground" disabled={!infinitePayHandle}>
-                        InfinitePay (Pix/Cartão) {!infinitePayHandle && "— configure em Configurações"}
+                        InfinitePay (Pix/Cartão) {!infinitePayHandle && "— configure em Pagamentos"}
                       </SelectItem>
                     </SelectContent>
                   </Select>

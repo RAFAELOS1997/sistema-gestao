@@ -127,6 +127,13 @@
       "when": 1784578771996,
       "tag": "0017_far_elektra",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1784592170676,
+      "tag": "0018_crazy_imperial_guard",
+      "breakpoints": true
     }
   ]
 }

@@ -84,6 +84,8 @@ import {
   createInfinitePayCharge,
   getInfinitePayChargeByOrderNsu,
   markInfinitePayChargePaid,
+  listPaymentMethods,
+  updatePaymentMethod,
 } from "./db";
 
 // O hash de senha (scrypt) nunca deve sair do servidor — sem isso, auth.me e
@@ -858,6 +860,35 @@ const analyticsRouter = router({
 });
 
 // ─── Settings Router ────────────────────────────────────────────────────────────
+
+// ─── Formas de Pagamento (nativas) ─────────────────────────────────────────────
+// Fixas (5: Dinheiro/Pix/Débito/Crédito/Cheque) — não dá pra criar/excluir
+// pela UI, só ativar/desativar e renomear. InfinitePay é tratada à parte
+// (infinitePayRouter abaixo), já que depende de uma InfiniteTag configurada.
+
+const paymentMethodsRouter = router({
+  list: protectedProcedure.query(() => listPaymentMethods()),
+
+  update: protectedProcedure
+    .input(
+      z.object({
+        id: z.number().int().positive(),
+        label: z.string().min(1).max(100).optional(),
+        enabled: z.boolean().optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const { id, ...data } = input;
+      await updatePaymentMethod(id, data);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "payment_method_updated",
+        module: "settings",
+        description: `Forma de pagamento ID ${id} atualizada`,
+      });
+      return { success: true };
+    }),
+});
 
 // ─── InfinitePay (Checkout Integrado) ──────────────────────────────────────────
 // Autenticação da API é só a InfiniteTag (handle público, sem "$") — não é
@@ -1722,6 +1753,7 @@ export const appRouter = router({
   portal: portalRouter,
   partnerTiers: partnerTiersRouter,
   infinitePay: infinitePayRouter,
+  paymentMethods: paymentMethodsRouter,
 });
 
 export type AppRouter = typeof appRouter;

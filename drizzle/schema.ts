@@ -123,6 +123,23 @@ export const systemConfig = mysqlTable("systemConfig", {
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type InsertSystemConfig = typeof systemConfig.$inferInsert;
 
+// Formas de pagamento nativas do sistema (Dinheiro/Pix/Débito/Crédito/Cheque)
+// — fixas (não dá pra criar/excluir pela UI), mas o admin pode ativar/
+// desativar e renomear cada uma. InfinitePay não entra aqui: é uma forma à
+// parte, condicionada a ter a InfiniteTag configurada em systemConfig.
+export const paymentMethods = mysqlTable("paymentMethods", {
+  id: int("id").autoincrement().primaryKey(),
+  key: varchar("key", { length: 50 }).notNull().unique(),
+  label: varchar("label", { length: 100 }).notNull(),
+  enabled: int("enabled").notNull().default(1),
+  sortOrder: int("sortOrder").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type PaymentMethod = typeof paymentMethods.$inferSelect;
+export type InsertPaymentMethod = typeof paymentMethods.$inferInsert;
+
 // Cobranças geradas via InfinitePay (Checkout Integrado) — cada venda paga
 // por lá vira uma linha aqui, pra acompanhar o status até o pagamento cair.
 export const infinitePayCharges = mysqlTable("infinitePayCharges", {

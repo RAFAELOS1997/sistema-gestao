@@ -23,6 +23,7 @@ import Purchases from "./pages/Purchases";
 import Sales from "./pages/Sales";
 import SalesControl from "./pages/SalesControl";
 import SettingsPage from "./pages/Settings";
+import PaymentSettings from "./pages/PaymentSettings";
 import Suppliers from "./pages/Suppliers";
 import { Users } from "./pages/Users";
 import Receipts from "./pages/Receipts";
@@ -75,6 +76,11 @@ function Router() {
       <Route path="/conferencia-pedido-7335">
         <DashboardLayout>
           <AuditPedido7335 />
+        </DashboardLayout>
+      </Route>
+      <Route path="/pagamentos">
+        <DashboardLayout>
+          <PaymentSettings />
         </DashboardLayout>
       </Route>
       <Route path="/settings">
