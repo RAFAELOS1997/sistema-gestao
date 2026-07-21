@@ -18,6 +18,7 @@ import {
   partnerApplications, InsertPartnerApplication,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { notifyProntaEntregaPaid } from "./_core/whatsapp";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1952,6 +1953,7 @@ export async function fulfillPublicOrderForCharge(orderNsu: string) {
   }
 
   await db.update(publicOrders).set({ status: "confirmado" }).where(eq(publicOrders.id, order.id));
+  notifyProntaEntregaPaid(order.customerName, order.subtotal);
 }
 
 // ─── Cobranças InfinitePay ─────────────────────────────────────────────────────

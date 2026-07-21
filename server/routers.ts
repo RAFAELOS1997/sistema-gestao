@@ -11,6 +11,7 @@ import { fetchSupplierProductStatus, fetchSupplierProductImage, fetchSupplierLis
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router, terreiroProcedure } from "./_core/trpc";
 import { TERREIRO_COOKIE_NAME, signTerreiroSession } from "./_core/terreiroAuth";
+import { notifyPartnerOrder, notifyPublicOrder, notifyConsignmentRequest, notifyPartnerApplication } from "./_core/whatsapp";
 import {
   createProduct,
   createSale,
@@ -1908,6 +1909,7 @@ const portalRouter = router({
           return { productId, name: item.name, quantity };
         });
         const result = await createConsignmentRequest(ctx.terreiro.id, items, input.notes);
+        notifyConsignmentRequest(ctx.terreiro.name, items.length);
         return { success: true, requestId: result.id };
       }),
   }),
@@ -2017,6 +2019,7 @@ const portalRouter = router({
         }
 
         const order = await createPartnerOrder(ctx.terreiro.id, orderItems);
+        notifyPartnerOrder(ctx.terreiro.name, order.subtotal);
         const tierUpdate = await recalculatePartnerTierByOrders(ctx.terreiro.id);
         return {
           success: true,
@@ -2244,6 +2247,7 @@ const publicStoreRouter = router({
         }
 
         const order = await createPublicOrder(input.customerName, input.customerPhone, orderItems);
+        notifyPublicOrder(input.customerName, subtotal);
         return { success: true, orderId: order.id, subtotal };
       }),
   }),
@@ -2291,6 +2295,7 @@ const partnerApplicationsRouter = router({
         city: input.city || null,
         notes: input.notes || null,
       });
+      notifyPartnerApplication(input.terreiroName, input.contactName);
       return { success: true };
     }),
 
