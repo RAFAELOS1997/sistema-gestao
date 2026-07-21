@@ -22,6 +22,7 @@ function createTerreiroContext(tierId: number | null = 1): TrpcContext {
       passwordHash: "n/a",
       contactName: null,
       phone: null,
+      logoUrl: null,
       tierId,
       isActive: 1,
       createdAt: new Date(),

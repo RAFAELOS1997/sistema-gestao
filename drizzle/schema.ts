@@ -277,6 +277,7 @@ export const terreiros = mysqlTable("terreiros", {
   passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
   contactName: varchar("contactName", { length: 255 }),
   phone: varchar("phone", { length: 20 }),
+  logoUrl: mediumtext("logoUrl"), // logo do terreiro, upload do próprio parceiro (base64)
   tierId: int("tierId"), // plano de parceria (Prata/Ouro/Diamante) — define o preço que ele vê
   isActive: int("isActive").default(1).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -286,6 +287,25 @@ export const terreiros = mysqlTable("terreiros", {
 
 export type Terreiro = typeof terreiros.$inferSelect;
 export type InsertTerreiro = typeof terreiros.$inferInsert;
+
+// Usuários adicionais do terreiro — o parceiro principal pode cadastrar mais
+// gente pra acessar o mesmo Portal (ex: quem cuida dos pedidos no dia a dia).
+// Login independente, mas cai na mesma sessão do terreiro (mesmo preço,
+// mesmo carrinho, mesmas permissões — não existe hierarquia entre eles).
+export const terreiroUsers = mysqlTable("terreiroUsers", {
+  id: int("id").autoincrement().primaryKey(),
+  terreiroId: int("terreiroId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  username: varchar("username", { length: 100 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }).notNull(),
+  isActive: int("isActive").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn"),
+});
+
+export type TerreiroUser = typeof terreiroUsers.$inferSelect;
+export type InsertTerreiroUser = typeof terreiroUsers.$inferInsert;
 
 // ─── Planos de Parceria (Prata/Ouro/Diamante) ─────────────────────────────────
 // Substituem o preço único: cada terreiro sobe de plano por mérito (volume de

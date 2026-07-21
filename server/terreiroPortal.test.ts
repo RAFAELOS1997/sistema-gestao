@@ -27,6 +27,7 @@ function createTerreiroContext(): TrpcContext {
       passwordHash: "n/a",
       contactName: null,
       phone: null,
+      logoUrl: null,
       tierId: 1,
       isActive: 1,
       createdAt: new Date(),
@@ -72,7 +73,31 @@ describe("portal.me", () => {
     const caller = appRouter.createCaller(createTerreiroContext());
     const result = await caller.portal.me();
     // Sem banco de dados no ambiente de teste, getPartnerTierById resolve null.
-    expect(result).toEqual({ id: 7, name: "Terreiro Teste", username: "terreiro-teste", tierName: null });
+    expect(result).toEqual({
+      id: 7,
+      name: "Terreiro Teste",
+      username: "terreiro-teste",
+      contactName: null,
+      phone: null,
+      logoUrl: null,
+      tierName: null,
+    });
+  });
+});
+
+describe("portal.profile / portal.teamUsers", () => {
+  it("bloqueiam acesso sem sessão de parceiro", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    await expect(caller.portal.profile.update({ contactName: "X" })).rejects.toMatchObject({ message: PARTNER_UNAUTHED_ERR_MSG });
+    await expect(caller.portal.teamUsers.list()).rejects.toMatchObject({ message: PARTNER_UNAUTHED_ERR_MSG });
+    await expect(
+      caller.portal.teamUsers.create({ name: "Ajudante", username: "ajudante-teste", password: "senha123" })
+    ).rejects.toMatchObject({ message: PARTNER_UNAUTHED_ERR_MSG });
+  });
+
+  it("terreiro autenticado consegue chamar profile.update e teamUsers.list sem quebrar (sem banco no teste)", async () => {
+    const caller = appRouter.createCaller(createTerreiroContext());
+    await expect(caller.portal.teamUsers.list()).resolves.toEqual([]);
   });
 });
 

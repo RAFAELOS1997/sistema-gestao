@@ -69,6 +69,11 @@ import {
   updateTerreiro,
   setTerreiroActive,
   touchTerreiroLastSignedIn,
+  createTerreiroUser,
+  listTerreiroUsers,
+  getTerreiroUserByUsername,
+  setTerreiroUserActive,
+  touchTerreiroUserLastSignedIn,
   listPartnerVisibleProducts,
   listPartnerTiers,
   getPartnerTierById,
@@ -1684,24 +1689,41 @@ const portalRouter = router({
       id: ctx.terreiro.id,
       name: ctx.terreiro.name,
       username: ctx.terreiro.username,
+      contactName: ctx.terreiro.contactName,
+      phone: ctx.terreiro.phone,
+      logoUrl: ctx.terreiro.logoUrl,
       tierName: tier?.name ?? null,
     };
   }),
 
+  // Aceita tanto o login principal do terreiro quanto um usuário da equipe
+  // dele (terreiroUsers) — os dois caem na mesma sessão (mesmo terreiroId),
+  // sem hierarquia entre eles.
   login: publicProcedure
     .input(z.object({ username: z.string().min(1), password: z.string().min(1) }))
     .mutation(async ({ input, ctx }) => {
       const terreiro = await getTerreiroByUsername(input.username);
-      if (!terreiro || !terreiro.isActive || !(await verifyPassword(input.password, terreiro.passwordHash))) {
-        throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário ou senha inválidos" });
+      if (terreiro && terreiro.isActive && (await verifyPassword(input.password, terreiro.passwordHash))) {
+        const sessionToken = await signTerreiroSession(terreiro.id);
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(TERREIRO_COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+        await touchTerreiroLastSignedIn(terreiro.id);
+        return { success: true, terreiro: { id: terreiro.id, name: terreiro.name, username: terreiro.username } } as const;
       }
 
-      const sessionToken = await signTerreiroSession(terreiro.id);
-      const cookieOptions = getSessionCookieOptions(ctx.req);
-      ctx.res.cookie(TERREIRO_COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
-      await touchTerreiroLastSignedIn(terreiro.id);
+      const teamUser = await getTerreiroUserByUsername(input.username);
+      if (teamUser && teamUser.isActive && (await verifyPassword(input.password, teamUser.passwordHash))) {
+        const parentTerreiro = await getTerreiroById(teamUser.terreiroId);
+        if (parentTerreiro && parentTerreiro.isActive) {
+          const sessionToken = await signTerreiroSession(parentTerreiro.id);
+          const cookieOptions = getSessionCookieOptions(ctx.req);
+          ctx.res.cookie(TERREIRO_COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+          await touchTerreiroUserLastSignedIn(teamUser.id);
+          return { success: true, terreiro: { id: parentTerreiro.id, name: parentTerreiro.name, username: teamUser.username } } as const;
+        }
+      }
 
-      return { success: true, terreiro: { id: terreiro.id, name: terreiro.name, username: terreiro.username } } as const;
+      throw new TRPCError({ code: "UNAUTHORIZED", message: "Usuário ou senha inválidos" });
     }),
 
   logout: publicProcedure.mutation(({ ctx }) => {
@@ -1712,6 +1734,58 @@ const portalRouter = router({
 
   products: router({
     list: terreiroProcedure.query(({ ctx }) => listPartnerVisibleProducts(ctx.terreiro.id, ctx.terreiro.tierId)),
+  }),
+
+  // Dados de cadastro do próprio terreiro — consultar/editar (nome de
+  // contato, telefone, logo). Username e plano continuam só editáveis pelo
+  // admin (evita lockout e evita burlar o avanço automático de plano).
+  profile: router({
+    update: terreiroProcedure
+      .input(z.object({ contactName: z.string().max(255).optional(), phone: z.string().max(20).optional() }))
+      .mutation(async ({ input, ctx }) => {
+        await updateTerreiro(ctx.terreiro.id, {
+          contactName: input.contactName ?? undefined,
+          phone: input.phone ?? undefined,
+        });
+        return { success: true };
+      }),
+
+    uploadLogo: terreiroProcedure
+      .input(z.object({ logoUrl: z.string().nullable() }))
+      .mutation(async ({ input, ctx }) => {
+        if (input.logoUrl && input.logoUrl.length > MAX_IMAGE_DATA_URL_LENGTH) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Logo muito grande. Tente uma imagem menor." });
+        }
+        await updateTerreiro(ctx.terreiro.id, { logoUrl: input.logoUrl });
+        return { success: true };
+      }),
+  }),
+
+  // Usuários adicionais que o terreiro cadastra pra acessar o mesmo Portal
+  // (ex: quem cuida dos pedidos no dia a dia) — sem hierarquia entre eles.
+  teamUsers: router({
+    list: terreiroProcedure.query(({ ctx }) => listTerreiroUsers(ctx.terreiro.id)),
+
+    create: terreiroProcedure
+      .input(
+        z.object({
+          name: z.string().min(1).max(255),
+          username: z.string().min(3).max(100).regex(/^[a-z0-9._-]+$/i, "Use apenas letras, números, ponto, hífen ou underline"),
+          password: z.string().min(6, "Senha deve ter ao menos 6 caracteres"),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const passwordHash = await hashPassword(input.password);
+        await createTerreiroUser({ terreiroId: ctx.terreiro.id, name: input.name, username: input.username, passwordHash });
+        return { success: true };
+      }),
+
+    setActive: terreiroProcedure
+      .input(z.object({ id: z.number().int().positive(), isActive: z.boolean() }))
+      .mutation(async ({ input, ctx }) => {
+        await setTerreiroUserActive(input.id, ctx.terreiro.id, input.isActive);
+        return { success: true };
+      }),
   }),
 
   // Itens em comodato com ESTE terreiro (sessão dele) — inclui histórico.

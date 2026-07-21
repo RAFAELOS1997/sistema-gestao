@@ -6,6 +6,7 @@ import {
   roles, permissions, rolePermissions, userRoles, auditLog, systemConfig,
   supplierCatalog, InsertSupplierCatalogItem,
   terreiros, InsertTerreiro,
+  terreiroUsers, InsertTerreiroUser,
   partnerTiers,
   terreiroProductPrices,
   consignments,
@@ -470,6 +471,32 @@ export async function runStartupMigrations() {
     `);
   } catch (error: any) {
     console.error("[migrations] partnerApplications:", error);
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE terreiros ADD COLUMN logoUrl mediumtext`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] terreiros.logoUrl:", error);
+  }
+
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS terreiroUsers (
+        id int AUTO_INCREMENT NOT NULL,
+        terreiroId int NOT NULL,
+        name varchar(255) NOT NULL,
+        username varchar(100) NOT NULL,
+        passwordHash varchar(255) NOT NULL,
+        isActive int NOT NULL DEFAULT 1,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        lastSignedIn timestamp NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY terreiroUsers_username_unique (username)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] terreiroUsers:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -1032,6 +1059,55 @@ export async function touchTerreiroLastSignedIn(id: number) {
   const db = await getDb();
   if (!db) return;
   await db.update(terreiros).set({ lastSignedIn: new Date() }).where(eq(terreiros.id, id));
+}
+
+// ─── Usuários adicionais do terreiro (equipe) ──────────────────────────────────
+// Login independente, mas resolve pra sessão do MESMO terreiro (sem
+// hierarquia entre eles — todo mundo vê e faz tudo que o terreiro vê/faz).
+
+export async function createTerreiroUser(data: Omit<InsertTerreiroUser, "id" | "createdAt" | "updatedAt" | "lastSignedIn" | "isActive">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existing = await getTerreiroUserByUsername(data.username);
+  if (existing) throw new Error("Já existe um login com esse nome de usuário");
+  const existingTerreiro = await getTerreiroByUsername(data.username);
+  if (existingTerreiro) throw new Error("Já existe um login com esse nome de usuário");
+  await db.insert(terreiroUsers).values({ ...data, isActive: 1 });
+}
+
+export async function listTerreiroUsers(terreiroId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(terreiroUsers).where(eq(terreiroUsers.terreiroId, terreiroId)).orderBy(terreiroUsers.name);
+}
+
+export async function getTerreiroUserByUsername(username: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(terreiroUsers).where(eq(terreiroUsers.username, username)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function getTerreiroUserById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(terreiroUsers).where(eq(terreiroUsers.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function setTerreiroUserActive(id: number, terreiroId: number, isActive: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(terreiroUsers)
+    .set({ isActive: isActive ? 1 : 0 })
+    .where(and(eq(terreiroUsers.id, id), eq(terreiroUsers.terreiroId, terreiroId)));
+}
+
+export async function touchTerreiroUserLastSignedIn(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(terreiroUsers).set({ lastSignedIn: new Date() }).where(eq(terreiroUsers.id, id));
 }
 
 // Catálogo exposto no Portal do Parceiro: só produtos ativos com estoque, e

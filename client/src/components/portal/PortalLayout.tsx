@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { label: "Produtos", path: "/parceiros/produtos" },
   { label: "Gerar Pedidos", path: "/parceiros/pedidos" },
   { label: "Comodato", path: "/parceiros/comodato" },
+  { label: "Minha Conta", path: "/parceiros/conta" },
 ];
 
 export default function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -38,6 +39,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+            {terreiro?.logoUrl && (
+              <img
+                src={terreiro.logoUrl}
+                alt={terreiro.name}
+                className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg object-cover ring-1 ring-border shrink-0"
+              />
+            )}
             {terreiro?.tierName && (
               <span className="px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-medium bg-[#c9a961]/15 text-[#c9a961] border border-[#c9a961]/30 whitespace-nowrap">
                 <span className="hidden sm:inline">Plano </span>

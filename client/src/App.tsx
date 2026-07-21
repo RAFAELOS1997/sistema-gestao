@@ -13,6 +13,7 @@ import Partners from "./pages/Partners";
 import PartnerDetail from "./pages/PartnerDetail";
 import PartnerTiers from "./pages/PartnerTiers";
 import PortalConsignments from "./pages/portal/PortalConsignments";
+import PortalAccount from "./pages/portal/PortalAccount";
 import PortalLogin from "./pages/portal/PortalLogin";
 import PortalProducts from "./pages/portal/PortalProducts";
 import PortalGenerateOrder from "./pages/portal/PortalGenerateOrder";
@@ -168,6 +169,11 @@ function Router() {
       <Route path="/parceiros/comodato">
         <PortalLayout>
           <PortalConsignments />
+        </PortalLayout>
+      </Route>
+      <Route path="/parceiros/conta">
+        <PortalLayout>
+          <PortalAccount />
         </PortalLayout>
       </Route>
 
