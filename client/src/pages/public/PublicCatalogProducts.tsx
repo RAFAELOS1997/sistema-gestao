@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import { useProntaEntregaCart } from "@/contexts/ProntaEntregaCartContext";
 import { QRCodeSVG } from "qrcode.react";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
+import { EntityShortcuts } from "@/components/EntityShortcuts";
 
 export default function PublicCatalogProducts() {
   const [search, setSearch] = useState("");
@@ -107,6 +108,8 @@ export default function PublicCatalogProducts() {
       <p className="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
         Por enquanto entregamos só em Ribeirão Preto e região — em breve, pra todo o Brasil!
       </p>
+
+      <EntityShortcuts onSelect={setSearch} />
 
       <div className="flex flex-col gap-3">
         <div className="relative">

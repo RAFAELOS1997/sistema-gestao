@@ -6,6 +6,7 @@ import { trpc } from "@/lib/trpc";
 import { Search, Plus, Minus, ShoppingCart } from "lucide-react";
 import { usePortalCart } from "@/contexts/PortalCartContext";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
+import { EntityShortcuts } from "@/components/EntityShortcuts";
 
 export default function PortalProducts() {
   const [search, setSearch] = useState("");
@@ -39,6 +40,8 @@ export default function PortalProducts() {
           )}
         </p>
       </div>
+
+      <EntityShortcuts onSelect={setSearch} />
 
       <div className="flex flex-col gap-3">
         <div className="relative">

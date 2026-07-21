@@ -128,6 +128,23 @@ export default function PublicPartnership() {
             <CheckCircle2 className="w-3.5 h-3.5 text-accent" /> Sem compromisso de compra
           </span>
         </div>
+        <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2 pt-3">
+          {[
+            { name: "Exu", colors: ["#8b1a1a", "#111111"] },
+            { name: "Pombagira", colors: ["#b5124e", "#8b1a1a"] },
+            { name: "Caboclo", colors: ["#2e6b3e", "#6b4a2e"] },
+            { name: "Malandragem", colors: ["#e6e6e6", "#8b1a1a"] },
+            { name: "Orixás", colors: ["#f5f5f0", "#c9a961"] },
+          ].map((e) => (
+            <span key={e.name} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className="flex h-2.5 w-2.5 rounded-full overflow-hidden shrink-0">
+                <span className="flex-1" style={{ backgroundColor: e.colors[0] }} />
+                <span className="flex-1" style={{ backgroundColor: e.colors[1] }} />
+              </span>
+              {e.name}
+            </span>
+          ))}
+        </div>
       </div>
 
       <DecorativeDivider className="max-w-sm mx-auto" />
