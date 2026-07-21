@@ -87,18 +87,47 @@ export default function PublicPartnership() {
   return (
     <div className="space-y-12 sm:space-y-16 pb-8">
       {/* Hero da página */}
-      <div className="text-center space-y-4 pt-2">
+      <div className="text-center space-y-5 pt-2">
         <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-xs font-semibold">
           <Handshake className="w-3.5 h-3.5" />
-          Programa de Parceria
+          Programa de Parceria — vagas abertas agora
         </div>
         <h1 className="text-2xl sm:text-4xl font-extrabold tracking-tight text-foreground max-w-2xl mx-auto">
-          Seu terreiro pagando <span className="text-accent">menos</span>, comprando junto com uma rede inteira
+          Todo mês que seu terreiro compra sem parceria, é dinheiro que{" "}
+          <span className="text-accent">fica na mesa</span>
         </h1>
         <p className="text-muted-foreground max-w-xl mx-auto text-sm sm:text-base">
-          Quanto mais terreiros parceiros pedindo com a gente, maior o volume de compra da Toca — e esse ganho a
-          gente devolve pra vocês em forma de desconto. Cadastre seu terreiro e comece a economizar hoje mesmo.
+          Terreiro parceiro paga até <strong className="text-foreground">22% mais barato</strong> em guias, velas,
+          ervas e tudo mais — e pode até ganhar uma bancada de produtos de graça pra vender no seu espaço. Sem
+          mensalidade, sem compromisso, sem pedido mínimo pra começar.
         </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-1">
+          <a href="#quero-ser-parceiro">
+            <Button size="lg" className="bg-accent text-accent-foreground hover:bg-accent/90 font-semibold">
+              Quero economizar agora
+            </Button>
+          </a>
+          <a
+            href={WHATSAPP_LINK}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 text-sm text-accent hover:underline"
+          >
+            <MessageCircle className="w-4 h-4" />
+            ou chama no WhatsApp
+          </a>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 pt-2 text-xs text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-accent" /> Cadastro leva 2 minutos
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-accent" /> Sem mensalidade
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5 text-accent" /> Sem compromisso de compra
+          </span>
+        </div>
       </div>
 
       <DecorativeDivider className="max-w-sm mx-auto" />
@@ -308,6 +337,36 @@ export default function PublicPartnership() {
         </Card>
       </div>
 
+      {/* Objeções / FAQ */}
+      <div className="max-w-2xl mx-auto space-y-4">
+        <h2 className="text-lg sm:text-xl font-bold text-foreground text-center">Ainda com dúvida? A gente responde</h2>
+        <div className="space-y-3">
+          {[
+            {
+              q: "Já compro com outro fornecedor, preciso trocar tudo?",
+              a: "Não precisa. Você continua comprando de quem já compra — a parceria é só mais uma opção com desconto pra vocês, sem exclusividade nem contrato.",
+            },
+            {
+              q: "E se eu não tiver dinheiro pra comprar mais agora?",
+              a: "Comece pelo comodato: a gente deixa produtos no terreiro sem custo nenhum na entrega. Você só paga o combinado depois de vender — não precisa investir nada do próprio bolso pra fazer parte.",
+            },
+            {
+              q: "Tem taxa, mensalidade ou letra miúda?",
+              a: "Não. É gratuito pra se cadastrar, não tem cobrança mensal, e você só compra quando quiser — o desconto do seu plano já vem aplicado, sem pegadinha.",
+            },
+            {
+              q: "E se eu não conseguir manter o ritmo de pedidos?",
+              a: "Sem problema — seu plano nunca é rebaixado automaticamente por ficar um tempo sem pedir. Ele só sobe quando você pede mais. No seu ritmo, sem pressão.",
+            },
+          ].map((item, i) => (
+            <div key={i} className="bg-card border border-border rounded-lg p-4">
+              <p className="font-semibold text-foreground text-sm">{item.q}</p>
+              <p className="text-sm text-muted-foreground mt-1">{item.a}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* CTA / Formulário */}
       <div className="max-w-xl mx-auto" id="quero-ser-parceiro">
         <Card className="border-accent/40">
@@ -332,9 +391,9 @@ export default function PublicPartnership() {
             ) : (
               <>
                 <div className="text-center">
-                  <h2 className="text-xl font-bold text-foreground">Quero ser parceiro</h2>
+                  <h2 className="text-xl font-bold text-foreground">Comece a economizar no próximo pedido</h2>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Preencha rapidinho e a gente entra em contato pra ativar seu acesso
+                    2 minutos pra preencher, e seu terreiro já entra com 10% de desconto garantido
                   </p>
                 </div>
                 <form onSubmit={handleSubmit} className="space-y-3">
