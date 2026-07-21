@@ -7,6 +7,7 @@ import { ZoomableImage } from "@/components/ZoomableImage";
 import { trpc } from "@/lib/trpc";
 import { Search, Plus, Minus, ChevronDown, ChevronUp, ShoppingCart, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { usePublicCart } from "@/contexts/PublicCartContext";
 
 type Source = "catalogo" | "estoque";
 
@@ -30,7 +31,7 @@ export default function PublicGenerateOrder() {
   const [source, setSource] = useState<Source>("catalogo");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("todas");
-  const [cart, setCart] = useState<Record<string, { source: Source; id: number; quantity: number }>>({});
+  const { cart, setQuantity, clear: clearCart } = usePublicCart();
   const [cartExpanded, setCartExpanded] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
@@ -51,7 +52,7 @@ export default function PublicGenerateOrder() {
   const createOrderMutation = trpc.publicStore.orders.create.useMutation({
     onSuccess: (result) => {
       setConfirmedOrder({ id: result.orderId, subtotal: result.subtotal });
-      setCart({});
+      clearCart();
       setCartExpanded(false);
     },
     onError: (error) => toast.error(error.message),
@@ -79,16 +80,6 @@ export default function PublicGenerateOrder() {
 
   const subtotal = cartItems.reduce((sum, i) => sum + i.total, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
-
-  const setQuantity = (itemSource: Source, id: number, quantity: number) => {
-    setCart((prev) => {
-      const next = { ...prev };
-      const key = cartKey(itemSource, id);
-      if (quantity <= 0) delete next[key];
-      else next[key] = { source: itemSource, id, quantity };
-      return next;
-    });
-  };
 
   const handleSubmit = () => {
     if (cartItems.length === 0) {

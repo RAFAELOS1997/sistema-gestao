@@ -6,6 +6,7 @@ import { ZoomableImage } from "@/components/ZoomableImage";
 import { trpc } from "@/lib/trpc";
 import { Search, Plus, Minus, ChevronDown, ChevronUp, ShoppingCart, Package } from "lucide-react";
 import { toast } from "sonner";
+import { usePortalCart } from "@/contexts/PortalCartContext";
 
 type Source = "catalogo" | "estoque";
 
@@ -43,7 +44,7 @@ export default function PortalGenerateOrder() {
   const [source, setSource] = useState<Source>("catalogo");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("todas");
-  const [cart, setCart] = useState<Record<string, { source: Source; id: number; quantity: number }>>({});
+  const { cart, setQuantity, clear: clearCart } = usePortalCart();
   const [cartExpanded, setCartExpanded] = useState(false);
 
   const utils = trpc.useUtils();
@@ -67,7 +68,7 @@ export default function PortalGenerateOrder() {
   const createOrderMutation = trpc.portal.orders.create.useMutation({
     onSuccess: () => {
       toast.success("Pedido enviado! A Toca da Pantera vai confirmar em breve.");
-      setCart({});
+      clearCart();
       setCartExpanded(false);
       utils.portal.orders.list.invalidate();
     },
@@ -97,16 +98,6 @@ export default function PortalGenerateOrder() {
   const subtotal = cartItems.reduce((sum, i) => sum + i.total, 0);
   const cartCount = cartItems.reduce((sum, i) => sum + i.quantity, 0);
   const missingForMinimum = Math.max(0, minimumCents - subtotal);
-
-  const setQuantity = (itemSource: Source, id: number, quantity: number) => {
-    setCart((prev) => {
-      const next = { ...prev };
-      const key = cartKey(itemSource, id);
-      if (quantity <= 0) delete next[key];
-      else next[key] = { source: itemSource, id, quantity };
-      return next;
-    });
-  };
 
   const handleSubmit = () => {
     if (cartItems.length === 0) {

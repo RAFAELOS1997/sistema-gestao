@@ -21,6 +21,8 @@ import PublicCatalogLayout from "./components/public/PublicCatalogLayout";
 import PublicCatalogProducts from "./pages/public/PublicCatalogProducts";
 import PublicGenerateOrder from "./pages/public/PublicGenerateOrder";
 import PublicOrders from "./pages/PublicOrders";
+import { PortalCartProvider } from "./contexts/PortalCartContext";
+import { PublicCartProvider } from "./contexts/PublicCartContext";
 import PriceReview from "./pages/PriceReview";
 import SupplierCatalog from "./pages/SupplierCatalog";
 import AuditPedido7335 from "./pages/AuditPedido7335";
@@ -174,7 +176,11 @@ function App() {
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider>
           <Toaster />
-          <Router />
+          <PortalCartProvider>
+            <PublicCartProvider>
+              <Router />
+            </PublicCartProvider>
+          </PortalCartProvider>
         </TooltipProvider>
       </ThemeProvider>
     </ErrorBoundary>

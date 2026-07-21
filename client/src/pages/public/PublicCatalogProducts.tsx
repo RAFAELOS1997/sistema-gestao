@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
+import { Link } from "wouter";
 import { Input } from "@/components/ui/input";
 import { ZoomableImage } from "@/components/ZoomableImage";
 import { trpc } from "@/lib/trpc";
-import { Search } from "lucide-react";
+import { Search, Plus, Minus, ShoppingCart } from "lucide-react";
+import { usePublicCart } from "@/contexts/PublicCartContext";
 
 const CATEGORY_LABELS: Record<string, string> = {
   guias: "Guias",
@@ -21,6 +23,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function PublicCatalogProducts() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("todas");
+  const { getQuantity, setQuantity, itemCount } = usePublicCart();
 
   const productsQuery = trpc.publicStore.products.list.useQuery();
   const products = productsQuery.data ?? [];
@@ -36,11 +39,11 @@ export default function PublicCatalogProducts() {
   }, [products, search, category]);
 
   return (
-    <div className="space-y-5 sm:space-y-6">
+    <div className="space-y-5 sm:space-y-6 pb-20">
       <div>
         <h1 className="text-xl sm:text-3xl font-bold text-foreground">Nossos Produtos</h1>
         <p className="text-muted-foreground text-sm">
-          Confira o que está disponível
+          Confira o que está disponível e monte seu pedido direto aqui
           {!productsQuery.isLoading && products.length > 0 && (
             <span> — {filtered.length === products.length ? `${products.length} produto(s)` : `${filtered.length} de ${products.length} produto(s)`}</span>
           )}
@@ -90,24 +93,56 @@ export default function PublicCatalogProducts() {
         <div className="text-center py-10 text-muted-foreground text-sm">Nenhum produto encontrado</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
-          {filtered.map((product) => (
-            <div key={product.id} className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
-              <div className="aspect-square bg-background flex items-center justify-center text-muted-foreground text-xs overflow-hidden">
-                {product.imageUrl ? (
-                  <ZoomableImage src={product.imageUrl} alt={product.name} className="w-full h-full" />
-                ) : (
-                  <span className="px-2 text-center">{(CATEGORY_LABELS[product.category] ?? product.category).toUpperCase()}</span>
-                )}
+          {filtered.map((product) => {
+            const qty = getQuantity("estoque", product.id);
+            return (
+              <div key={product.id} className="bg-card border border-border rounded-lg overflow-hidden flex flex-col">
+                <div className="aspect-square bg-background flex items-center justify-center text-muted-foreground text-xs overflow-hidden">
+                  {product.imageUrl ? (
+                    <ZoomableImage src={product.imageUrl} alt={product.name} className="w-full h-full" />
+                  ) : (
+                    <span className="px-2 text-center">{(CATEGORY_LABELS[product.category] ?? product.category).toUpperCase()}</span>
+                  )}
+                </div>
+                <div className="p-2.5 sm:p-3 flex flex-col flex-1">
+                  <h3 className="font-semibold text-xs sm:text-sm text-foreground leading-snug line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] break-words">
+                    {product.name}
+                  </h3>
+                  <p className="text-base sm:text-lg font-bold mt-1 text-accent">R$ {(product.price / 100).toFixed(2)}</p>
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-border">
+                    <button
+                      onClick={() => setQuantity("estoque", product.id, qty - 1)}
+                      disabled={qty === 0}
+                      className="p-1.5 rounded bg-background border border-border text-accent disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/10 transition-colors"
+                    >
+                      <Minus className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="text-base font-bold text-foreground">{qty}</span>
+                    <button
+                      onClick={() => setQuantity("estoque", product.id, qty + 1)}
+                      disabled={qty >= product.currentStock}
+                      className="p-1.5 rounded bg-accent text-accent-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/90 transition-colors"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="p-2.5 sm:p-3 flex flex-col flex-1">
-                <h3 className="font-semibold text-xs sm:text-sm text-foreground leading-snug line-clamp-2 min-h-[2rem] sm:min-h-[2.5rem] break-words">
-                  {product.name}
-                </h3>
-                <p className="text-base sm:text-lg font-bold mt-1 text-accent">R$ {(product.price / 100).toFixed(2)}</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
+      )}
+
+      {itemCount > 0 && (
+        <Link href="/loja/pedidos">
+          <div className="fixed bottom-4 left-3 right-3 sm:left-auto sm:right-6 sm:w-80 z-30 bg-accent text-accent-foreground rounded-lg shadow-xl px-4 py-3 flex items-center justify-between cursor-pointer">
+            <span className="flex items-center gap-2 text-sm font-medium">
+              <ShoppingCart className="w-4 h-4" />
+              {itemCount} item(ns) no pedido
+            </span>
+            <span className="text-sm font-semibold">Revisar e enviar →</span>
+          </div>
+        </Link>
       )}
     </div>
   );
