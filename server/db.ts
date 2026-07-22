@@ -1901,9 +1901,13 @@ export async function listAllPartnerOrders() {
     .leftJoin(terreiros, eq(terreiros.id, partnerOrders.terreiroId))
     .orderBy(desc(partnerOrders.createdAt));
   const items = await db.select().from(partnerOrderItems);
+  const catalogStock = await db.select({ id: supplierCatalog.id, stockStatus: supplierCatalog.stockStatus }).from(supplierCatalog);
+  const stockById = new Map(catalogStock.map((c) => [c.id, c.stockStatus]));
   return orders.map((order) => ({
     ...order,
-    items: items.filter((i) => i.partnerOrderId === order.id),
+    items: items
+      .filter((i) => i.partnerOrderId === order.id)
+      .map((i) => ({ ...i, currentStockStatus: i.supplierCatalogId ? stockById.get(i.supplierCatalogId) ?? null : null })),
   }));
 }
 
@@ -2144,9 +2148,13 @@ export async function listAllPublicOrders() {
     .leftJoin(terreiros, eq(terreiros.id, publicOrders.referredByTerreiroId))
     .orderBy(desc(publicOrders.createdAt));
   const items = await db.select().from(publicOrderItems);
+  const catalogStock = await db.select({ id: supplierCatalog.id, stockStatus: supplierCatalog.stockStatus }).from(supplierCatalog);
+  const stockById = new Map(catalogStock.map((c) => [c.id, c.stockStatus]));
   return orders.map((order) => ({
     ...order,
-    items: items.filter((i) => i.publicOrderId === order.id),
+    items: items
+      .filter((i) => i.publicOrderId === order.id)
+      .map((i) => ({ ...i, currentStockStatus: i.supplierCatalogId ? stockById.get(i.supplierCatalogId) ?? null : null })),
   }));
 }
 

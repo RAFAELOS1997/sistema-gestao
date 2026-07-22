@@ -6,8 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { ClipboardList, PackageCheck } from "lucide-react";
+import { ClipboardList, PackageCheck, Copy, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { copyPurchaseList } from "@/lib/purchaseList";
 
 function formatAddress(order: any): string | null {
   const parts = [
@@ -120,9 +121,14 @@ export default function PartnerOrders() {
                   </div>
                   <div className="text-xs text-muted-foreground space-y-0.5">
                     {order.items.map((item: any) => (
-                      <p key={item.id}>
+                      <p key={item.id} className="flex items-center gap-1 flex-wrap">
                         {item.quantity}x {item.name} — R$ {(item.totalPrice / 100).toFixed(2)}
                         {item.source === "estoque" ? " (estoque)" : ""}
+                        {item.currentStockStatus === "indisponivel" && (
+                          <Badge className="text-[9px] bg-amber-900/40 text-amber-300 border-amber-700">
+                            <AlertTriangle className="w-2.5 h-2.5 mr-0.5" /> Fornecedor sem estoque
+                          </Badge>
+                        )}
                       </p>
                     ))}
                   </div>
@@ -138,6 +144,11 @@ export default function PartnerOrders() {
                   <p className="text-xs text-muted-foreground">
                     {formatAddress(order) ?? "Endereço não cadastrado pelo parceiro"}
                   </p>
+                  {order.items.some((i: any) => i.source === "catalogo") && (
+                    <Button size="sm" variant="outline" className="h-8 w-full" onClick={() => copyPurchaseList(order)}>
+                      <Copy className="w-3.5 h-3.5 mr-1.5" /> Copiar lista de compra
+                    </Button>
+                  )}
                   <TrackingEditor order={order} />
                   <Select
                     value={order.status}
@@ -179,6 +190,16 @@ export default function PartnerOrders() {
                       {order.items
                         .map((item: any) => `${item.quantity}x ${item.name}${item.source === "estoque" ? " (estoque)" : ""}`)
                         .join(", ")}
+                      {order.items.some((i: any) => i.currentStockStatus === "indisponivel") && (
+                        <Badge className="text-[9px] mt-1 bg-amber-900/40 text-amber-300 border-amber-700 w-fit">
+                          <AlertTriangle className="w-2.5 h-2.5 mr-0.5" /> Item sem estoque no fornecedor
+                        </Badge>
+                      )}
+                      {order.items.some((i: any) => i.source === "catalogo") && (
+                        <Button size="sm" variant="outline" className="h-7 mt-1 text-xs" onClick={() => copyPurchaseList(order)}>
+                          <Copy className="w-3 h-3 mr-1" /> Copiar lista
+                        </Button>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs max-w-[220px]">
                       <div>{formatAddress(order) ?? "Sem endereço"}</div>
