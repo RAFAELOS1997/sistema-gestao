@@ -11,6 +11,7 @@ import { fetchSupplierProductStatus, fetchSupplierProductImage, fetchSupplierLis
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router, terreiroProcedure } from "./_core/trpc";
 import { TERREIRO_COOKIE_NAME, signTerreiroSession } from "./_core/terreiroAuth";
+import { searchOsmTerreiros } from "./_core/osmProspectSearch";
 import { notifyPartnerOrder, notifyPublicOrder, notifyConsignmentRequest, notifyPartnerApplication } from "./_core/whatsapp";
 import {
   createProduct,
@@ -2586,6 +2587,57 @@ const partnerApplicationsRouter = router({
         description: `Lead de prospecção "${input.terreiroName}" adicionado`,
       });
       return { success: true };
+    }),
+
+  // Busca automática de verdade (OpenStreetMap/Overpass API — gratuita, sem
+  // chave) — roda toda vez que o admin clica no botão, não é um robô
+  // rodando sozinho em segundo plano. Cobertura é menor que Google Maps
+  // (depende do que já foi cadastrado no mapa aberto por voluntários), mas
+  // não exige nenhuma conta nem cartão configurado.
+  searchProspects: protectedProcedure
+    .input(z.object({ city: z.string().min(1).max(100).default("Ribeirão Preto") }))
+    .mutation(async ({ input, ctx }) => {
+      let found: Awaited<ReturnType<typeof searchOsmTerreiros>> = [];
+      try {
+        found = await searchOsmTerreiros(input.city);
+      } catch (error) {
+        console.error("[searchProspects] Erro na busca OpenStreetMap:", error);
+        throw new TRPCError({
+          code: "INTERNAL_SERVER_ERROR",
+          message: "Não consegui buscar agora — o serviço de mapas pode estar sobrecarregado. Tente de novo em alguns minutos.",
+        });
+      }
+
+      const existing = await listPartnerApplications();
+      const existingNames = new Set(existing.map((e) => e.terreiroName.trim().toLowerCase()));
+      const terreiroNames = new Set((await listTerreiros(true)).map((t) => t.name.trim().toLowerCase()));
+
+      let added = 0;
+      for (const prospect of found) {
+        const key = prospect.name.trim().toLowerCase();
+        if (existingNames.has(key) || terreiroNames.has(key)) continue;
+        await createPartnerApplication({
+          terreiroName: prospect.name,
+          contactName: "A definir",
+          phone: "A confirmar",
+          city: input.city,
+          instagram: null,
+          address: prospect.address,
+          notes: `Achado automaticamente via OpenStreetMap (${prospect.lat.toFixed(5)}, ${prospect.lon.toFixed(5)}).`,
+          source: "prospeccao",
+        });
+        existingNames.add(key);
+        added += 1;
+      }
+
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "partner_prospect_search",
+        module: "partners",
+        description: `Busca automática em "${input.city}": ${found.length} encontrado(s), ${added} novo(s) adicionado(s)`,
+      });
+
+      return { totalFound: found.length, added };
     }),
 
   list: protectedProcedure.query(() => listPartnerApplications()),

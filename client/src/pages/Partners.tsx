@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Power, Medal, Eye, Link2, UserPlus, Check, X, Search, Trash2 } from "lucide-react";
+import { Plus, Edit2, Power, Medal, Eye, Link2, UserPlus, Check, X, Search, Trash2, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -59,6 +59,19 @@ export default function Partners() {
       utils.partnerApplications.list.invalidate();
     },
     onError: (error) => toast.error(`Erro: ${error.message}`),
+  });
+  const searchProspectsMutation = trpc.partnerApplications.searchProspects.useMutation({
+    onSuccess: (result) => {
+      if (result.added > 0) {
+        toast.success(`Busca concluída: ${result.added} terreiro(s) novo(s) adicionado(s)!`);
+      } else if (result.totalFound > 0) {
+        toast.info(`Busca concluída: ${result.totalFound} encontrado(s), mas todos já estavam na lista.`);
+      } else {
+        toast.info("Busca concluída: nada novo encontrado no mapa dessa vez. Tente de novo mais tarde.");
+      }
+      utils.partnerApplications.list.invalidate();
+    },
+    onError: (error) => toast.error(`Erro na busca: ${error.message}`),
   });
   const tierName = (tierId: number | null) => tiers.find((t) => t.id === tierId)?.name ?? null;
   const openItemsOf = (terreiroId: number) =>
@@ -217,6 +230,15 @@ export default function Partners() {
               Planos e Preços
             </Button>
           </Link>
+          <Button
+            variant="outline"
+            disabled={searchProspectsMutation.isPending}
+            onClick={() => searchProspectsMutation.mutate({ city: "Ribeirão Preto" })}
+            title="Busca no OpenStreetMap (mapa aberto e gratuito) por terreiros/centros ainda não cadastrados"
+          >
+            <Sparkles className="w-4 h-4 mr-2" />
+            {searchProspectsMutation.isPending ? "Buscando..." : "Buscar Automaticamente"}
+          </Button>
           <Dialog open={isProspectDialogOpen} onOpenChange={setIsProspectDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">
@@ -413,8 +435,9 @@ export default function Partners() {
                 Solicitações e Prospecção ({visibleApplications.length})
               </CardTitle>
               <CardDescription>
-                Terreiros que se cadastraram na página "Parceria com a Toca" ou que você achou e adicionou em
-                "Prospectar Terreiro" — aprovar já abre o cadastro de login pré-preenchido
+                Terreiros que se cadastraram na página "Parceria com a Toca", que você achou e adicionou em
+                "Prospectar Terreiro", ou que "Buscar Automaticamente" encontrou sozinho no mapa — aprovar já abre
+                o cadastro de login pré-preenchido
               </CardDescription>
             </div>
             <Button variant="outline" size="sm" onClick={() => setShowAllApplications((v) => !v)}>
