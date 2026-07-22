@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { DecorativeDivider } from "@/components/DecorativeDivider";
-import { MessageCircle, MapPin, ShieldCheck } from "lucide-react";
+import { MessageCircle, MapPin, ShieldCheck, Truck, Menu } from "lucide-react";
 import { WHATSAPP_LINK } from "@/lib/contact";
+import { Button } from "@/components/ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 const NAV_ITEMS = [
   { label: "Pronta Entrega", path: "/loja/produtos" },
@@ -11,57 +14,118 @@ const NAV_ITEMS = [
 
 export default function PublicCatalogLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const goTo = (path: string) => {
+    setLocation(path);
+    setMenuOpen(false);
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Hero */}
-      <header className="relative overflow-hidden border-b border-[#c9a961]/20">
-        {/* Marca d'água da própria logo — reforça a identidade visual da loja */}
-        <div
-          className="absolute inset-0 pointer-events-none opacity-[0.08] bg-center bg-cover blur-sm scale-125"
-          style={{ backgroundImage: "url('/logo.jpeg')" }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/70 to-background pointer-events-none" />
-        <div
-          className="absolute inset-0 pointer-events-none opacity-40"
-          style={{ background: "radial-gradient(circle at 50% -10%, #c9a961 0%, transparent 55%)" }}
-        />
-        <div className="relative max-w-5xl mx-auto px-4 pt-8 pb-6 sm:pt-12 sm:pb-8 flex flex-col items-center text-center">
-          <img
-            src="/logo.jpeg"
-            alt="Toca da Pantera"
-            className="h-24 w-24 sm:h-32 sm:w-32 rounded-2xl object-cover shadow-2xl shadow-[#c9a961]/30 ring-4 ring-[#c9a961]/40"
-          />
-          <h1 className="mt-4 text-3xl sm:text-5xl font-extrabold tracking-tight text-foreground">
-            Toca da <span className="text-[#c9a961]">Pantera</span>
-          </h1>
-          <p className="mt-1.5 text-[11px] sm:text-xs tracking-[0.2em] uppercase text-[#c9a961]/80 font-medium">
-            Fé · Proteção · Espiritualidade
-          </p>
-          <p className="mt-2 text-sm sm:text-base text-muted-foreground max-w-md">
-            Artigos umbandistas e religiosos — confira nossos produtos e faça seu pedido direto pelo site
-          </p>
+      {/* Barra de confiança */}
+      <div className="bg-[#c9a961] text-[#1a1207]">
+        <div className="max-w-6xl mx-auto px-4 h-8 flex items-center justify-center sm:justify-between text-[11px] sm:text-xs font-semibold">
+          <div className="hidden sm:flex items-center gap-4">
+            <span className="inline-flex items-center gap-1.5">
+              <MapPin className="w-3 h-3" /> Loja física em Ribeirão Preto, SP
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Truck className="w-3 h-3" /> Entrega pra todo o Brasil
+            </span>
+          </div>
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldCheck className="w-3 h-3" /> Pagamento seguro via InfinitePay
+          </span>
+        </div>
+      </div>
 
-          <nav className="mt-6 inline-flex gap-1 p-1 rounded-full bg-card border border-[#c9a961]/25 shadow-lg">
+      {/* Cabeçalho principal */}
+      <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-[#c9a961]/20">
+        <div className="max-w-6xl mx-auto px-4 h-16 sm:h-20 flex items-center justify-between gap-3">
+          <button onClick={() => goTo("/loja/produtos")} className="flex items-center gap-2.5 sm:gap-3 shrink-0 min-w-0">
+            <img
+              src="/logo.jpeg"
+              alt="Toca da Pantera"
+              className="h-10 w-10 sm:h-12 sm:w-12 rounded-lg object-cover ring-1 ring-[#c9a961]/40 shrink-0"
+            />
+            <span className="text-left min-w-0">
+              <span className="block text-sm sm:text-lg font-extrabold leading-tight text-foreground truncate">
+                Toca da <span className="text-[#c9a961]">Pantera</span>
+              </span>
+              <span className="hidden sm:block text-[10px] tracking-[0.15em] uppercase text-muted-foreground">
+                Fé · Proteção · Espiritualidade
+              </span>
+            </span>
+          </button>
+
+          <nav className="hidden md:flex items-center gap-1">
             {NAV_ITEMS.map((item) => (
               <button
                 key={item.path}
-                onClick={() => setLocation(item.path)}
-                className={`px-5 sm:px-6 py-2.5 rounded-full text-sm font-semibold transition-colors ${
-                  location === item.path
-                    ? "bg-accent text-accent-foreground shadow"
-                    : "text-muted-foreground hover:text-foreground"
+                onClick={() => goTo(item.path)}
+                className={`relative px-4 py-2 text-sm font-semibold transition-colors ${
+                  location === item.path ? "text-[#c9a961]" : "text-foreground/80 hover:text-foreground"
                 }`}
               >
                 {item.label}
+                {location === item.path && (
+                  <span className="absolute left-4 right-4 -bottom-[1px] h-[2px] bg-[#c9a961] rounded-full" />
+                )}
               </button>
             ))}
           </nav>
-        </div>
-        <div className="relative max-w-xs mx-auto pb-4 sm:pb-5">
-          <DecorativeDivider tone="gold" />
+
+          <div className="flex items-center gap-2 shrink-0">
+            <a
+              href={WHATSAPP_LINK}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-md bg-accent text-accent-foreground hover:bg-accent/90 transition-colors"
+            >
+              <MessageCircle className="w-4 h-4" /> WhatsApp
+            </a>
+            <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="md:hidden border-[#c9a961]/30">
+                  <Menu className="w-5 h-5" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="right" className="w-72">
+                <SheetHeader>
+                  <SheetTitle className="flex items-center gap-2">
+                    <img src="/logo.jpeg" alt="" className="h-8 w-8 rounded-md object-cover ring-1 ring-[#c9a961]/40" />
+                    Toca da Pantera
+                  </SheetTitle>
+                </SheetHeader>
+                <nav className="mt-4 flex flex-col gap-1 px-4">
+                  {NAV_ITEMS.map((item) => (
+                    <button
+                      key={item.path}
+                      onClick={() => goTo(item.path)}
+                      className={`text-left px-3 py-3 rounded-md text-sm font-semibold transition-colors ${
+                        location === item.path ? "bg-[#c9a961]/15 text-[#c9a961]" : "text-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                  <a
+                    href={WHATSAPP_LINK}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={() => setMenuOpen(false)}
+                    className="mt-2 inline-flex items-center justify-center gap-2 px-3 py-3 rounded-md text-sm font-semibold bg-accent text-accent-foreground"
+                  >
+                    <MessageCircle className="w-4 h-4" /> Falar no WhatsApp
+                  </a>
+                </nav>
+              </SheetContent>
+            </Sheet>
+          </div>
         </div>
       </header>
+
       <main className="max-w-6xl mx-auto p-3 sm:p-6">{children}</main>
       <footer className="border-t border-[#c9a961]/20 mt-8">
         <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col items-center gap-3 text-center">
@@ -89,7 +153,7 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
             Fale com a gente pelo WhatsApp
           </a>
           <p className="text-xs text-muted-foreground max-w-md">
-            Por enquanto entregamos só em Ribeirão Preto e região. Em breve vamos atender o Brasil todo!
+            Retire na loja em Ribeirão Preto ou receba em casa em qualquer lugar do Brasil, via Correios.
           </p>
         </div>
       </footer>
