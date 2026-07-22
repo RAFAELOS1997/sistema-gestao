@@ -539,6 +539,13 @@ export const partnerApplications = mysqlTable("partnerApplications", {
   city: varchar("city", { length: 100 }),
   notes: text("notes"),
   status: mysqlEnum("status", ["pendente", "aprovado", "recusado"]).notNull().default("pendente"),
+  // "site" = terreiro se cadastrou sozinho na página pública "Parceria com a
+  // Toca"; "prospeccao" = o Rafael achou e cadastrou manualmente (ferramenta
+  // de prospecção, ex: busca por terreiros de uma cidade) — nunca setado
+  // pelo formulário público, só pela tela de admin.
+  source: mysqlEnum("source", ["site", "prospeccao"]).notNull().default("site"),
+  instagram: varchar("instagram", { length: 100 }),
+  address: text("address"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

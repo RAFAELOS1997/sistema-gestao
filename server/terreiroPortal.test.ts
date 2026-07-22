@@ -178,3 +178,20 @@ describe("terreiros.create", () => {
     ).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG });
   });
 });
+
+// ─── Ferramenta de prospecção de terreiros ────────────────────────────────────
+
+describe("partnerApplications.createManual", () => {
+  it("exige sessão de staff — anônimo não consegue plantar um lead com source forjado", async () => {
+    const anonCaller = appRouter.createCaller(createPublicContext());
+    await expect(
+      anonCaller.partnerApplications.createManual({ terreiroName: "Terreiro X", contactName: "Fulano", phone: "16999999999" })
+    ).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG });
+
+    const terreiroCaller = appRouter.createCaller(createTerreiroContext());
+    await expect(
+      terreiroCaller.partnerApplications.createManual({ terreiroName: "Terreiro X", contactName: "Fulano", phone: "16999999999" })
+    ).rejects.toMatchObject({ message: UNAUTHED_ERR_MSG });
+  });
+});
+

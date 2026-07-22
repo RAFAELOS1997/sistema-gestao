@@ -120,6 +120,7 @@ import {
   createPartnerApplication,
   listPartnerApplications,
   updatePartnerApplicationStatus,
+  deletePartnerApplication,
 } from "./db";
 
 // O hash de senha (scrypt) nunca deve sair do servidor — sem isso, auth.me e
@@ -2548,6 +2549,45 @@ const partnerApplicationsRouter = router({
       return { success: true };
     }),
 
+  // Ferramenta de prospecção: o Rafael cadastra manualmente um terreiro que
+  // achou (ex: busca por cidade), com dados que uma solicitação pelo site
+  // não tem (endereço, Instagram). Cai na mesma lista/fluxo de aprovação das
+  // solicitações que vêm pelo site — só o "source" que os diferencia.
+  createManual: protectedProcedure
+    .input(
+      z.object({
+        terreiroName: z.string().min(1).max(255),
+        // Ao contrário do formulário público (onde quem preenche já tem
+        // certeza dos próprios dados), um lead de prospecção pode começar só
+        // com o nome achado numa busca — contato e telefone vêm depois.
+        contactName: z.string().max(255).optional(),
+        phone: z.string().max(20).optional(),
+        city: z.string().max(100).optional(),
+        instagram: z.string().max(100).optional(),
+        address: z.string().max(1000).optional(),
+        notes: z.string().max(1000).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await createPartnerApplication({
+        terreiroName: input.terreiroName,
+        contactName: input.contactName || "A definir",
+        phone: input.phone || "A confirmar",
+        city: input.city || null,
+        instagram: input.instagram || null,
+        address: input.address || null,
+        notes: input.notes || null,
+        source: "prospeccao",
+      });
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "partner_prospect_added",
+        module: "partners",
+        description: `Lead de prospecção "${input.terreiroName}" adicionado`,
+      });
+      return { success: true };
+    }),
+
   list: protectedProcedure.query(() => listPartnerApplications()),
 
   updateStatus: protectedProcedure
@@ -2559,6 +2599,19 @@ const partnerApplicationsRouter = router({
         action: "partner_application_status_updated",
         module: "partners",
         description: `Solicitação de parceria ID ${input.id} marcada como "${input.status}"`,
+      });
+      return { success: true };
+    }),
+
+  delete: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(async ({ input, ctx }) => {
+      await deletePartnerApplication(input.id);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "partner_application_deleted",
+        module: "partners",
+        description: `Solicitação/lead ID ${input.id} removido`,
       });
       return { success: true };
     }),
