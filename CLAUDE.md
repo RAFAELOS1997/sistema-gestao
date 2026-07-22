@@ -31,7 +31,16 @@ Gestão de estoque, vendas (PDV), compras, fornecedores e relatórios pra loja
 física + Instagram. Rodando em produção, uso diário real do Rafael — não é
 protótipo.
 
-- **URL ao vivo:** https://sistema.tocadapantera.com.br
+- **URL ao vivo (admin):** https://sistema.tocadapantera.com.br — painel
+  de gestão (login, dashboard, vendas, estoque etc.)
+- **URL ao vivo (loja pública):** https://tocadapantera.com.br — domínio
+  principal, "estacionado" (alias) em cima do mesmo Web App desde
+  2026-07-21. É o MESMO app/deploy dos dois domínios — `client/src/pages/Home.tsx`
+  decide pra onde mandar a `/` olhando `window.location.hostname`:
+  `tocadapantera.com.br`/`www.tocadapantera.com.br` → `/loja/produtos`
+  (loja), qualquer outro host (inclusive `sistema.tocadapantera.com.br`) →
+  `/dashboard` (admin). Não existe roteamento por domínio no servidor, é só
+  esse client-side redirect.
 - **Repositório:** https://github.com/RAFAELOS1997/sistema-gestao (branch
   `main`, usuário RAFAELOS1997). Todo push pra `main` dispara auto-deploy na
   Hostinger.
@@ -40,8 +49,11 @@ protótipo.
   é uma cópia de referência mais antiga — **não é o projeto ativo**, não
   editar lá.
 - **Hospedagem:** Hostinger "Web Apps" (Node.js), subdomínio
-  `sistema.tocadapantera.com.br`. O domínio principal
-  `tocadapantera.com.br` está reservado pra um futuro site de vendas.
+  `sistema.tocadapantera.com.br`. `tocadapantera.com.br` era um site vazio
+  separado (hospedagem PHP/HTML padrão, "reservado pra futuro site de
+  vendas") — foi apagado em 2026-07-21 e o domínio "estacionado" (Hostinger
+  → site do Web App → Domínios → Domínios Estacionados) na frente do Web
+  App, pra virar a loja de verdade.
 
 ## Stack técnica
 
