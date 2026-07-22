@@ -663,6 +663,24 @@ export async function runStartupMigrations() {
     console.error("[migrations] backfillMissingReferralCodes:", error);
   }
 
+  // Ferramenta de prospecção: distingue solicitação vinda do site (padrão
+  // "site") de lead cadastrado manualmente pelo admin ("prospeccao").
+  try {
+    await db.execute(sql`ALTER TABLE partnerApplications ADD COLUMN source enum('site','prospeccao') DEFAULT 'site' NOT NULL`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] partnerApplications.source:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE partnerApplications ADD COLUMN instagram varchar(100)`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] partnerApplications.instagram:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE partnerApplications ADD COLUMN address text`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] partnerApplications.address:", error);
+  }
+
   console.log("[migrations] Verificação de schema concluída.");
 }
 
@@ -2010,6 +2028,12 @@ export async function updatePartnerApplicationStatus(id: number, status: "penden
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(partnerApplications).set({ status }).where(eq(partnerApplications.id, id));
+}
+
+export async function deletePartnerApplication(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(partnerApplications).where(eq(partnerApplications.id, id));
 }
 
 // ─── Catálogo Público (loja online, sem login) ─────────────────────────────────

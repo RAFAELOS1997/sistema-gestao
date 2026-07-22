@@ -218,6 +218,13 @@
       "when": 1784686420674,
       "tag": "0030_conscious_scarlet_spider",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1784725242238,
+      "tag": "0031_misty_blackheart",
+      "breakpoints": true
     }
   ]
 }

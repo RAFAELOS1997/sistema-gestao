@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Edit2, Power, Medal, Eye, Link2, UserPlus, Check, X } from "lucide-react";
+import { Plus, Edit2, Power, Medal, Eye, Link2, UserPlus, Check, X, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -16,10 +16,17 @@ const NO_TIER = "sem-plano";
 
 const EMPTY_FORM = { name: "", username: "", password: "", contactName: "", phone: "", tierId: NO_TIER };
 
+const EMPTY_PROSPECT_FORM = { terreiroName: "", contactName: "", phone: "", city: "Ribeirão Preto", instagram: "", address: "", notes: "" };
+
+const SOURCE_LABEL: Record<string, string> = { site: "Site", prospeccao: "Prospecção" };
+
 export default function Partners() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [formData, setFormData] = useState(EMPTY_FORM);
+  const [isProspectDialogOpen, setIsProspectDialogOpen] = useState(false);
+  const [prospectForm, setProspectForm] = useState(EMPTY_PROSPECT_FORM);
+  const [showAllApplications, setShowAllApplications] = useState(false);
 
   const utils = trpc.useUtils();
   const { data: terreiros = [], isLoading } = trpc.terreiros.list.useQuery({ includeInactive: true });
@@ -29,9 +36,26 @@ export default function Partners() {
   const { data: spendingTotals = [] } = trpc.terreiros.spendingTotals.useQuery();
   const { data: applications = [] } = trpc.partnerApplications.list.useQuery();
   const pendingApplications = applications.filter((a: any) => a.status === "pendente");
+  const visibleApplications = showAllApplications ? applications : pendingApplications;
   const applicationStatusMutation = trpc.partnerApplications.updateStatus.useMutation({
     onSuccess: () => {
       toast.success("Atualizado!");
+      utils.partnerApplications.list.invalidate();
+    },
+    onError: (error) => toast.error(`Erro: ${error.message}`),
+  });
+  const createProspectMutation = trpc.partnerApplications.createManual.useMutation({
+    onSuccess: () => {
+      toast.success("Lead adicionado à lista de prospecção!");
+      setIsProspectDialogOpen(false);
+      setProspectForm(EMPTY_PROSPECT_FORM);
+      utils.partnerApplications.list.invalidate();
+    },
+    onError: (error) => toast.error(`Erro ao adicionar lead: ${error.message}`),
+  });
+  const deleteApplicationMutation = trpc.partnerApplications.delete.useMutation({
+    onSuccess: () => {
+      toast.success("Removido!");
       utils.partnerApplications.list.invalidate();
     },
     onError: (error) => toast.error(`Erro: ${error.message}`),
@@ -125,6 +149,39 @@ export default function Partners() {
     setActiveMutation.mutate({ id: terreiro.id, isActive: activating });
   };
 
+  // "Aprovar" já marca a solicitação/lead como aprovado E abre o cadastro de
+  // terreiro pré-preenchido — fecha o ciclo prospecção → parceiro num clique.
+  const handleApproveApplication = (app: any) => {
+    applicationStatusMutation.mutate({ id: app.id, status: "aprovado" });
+    setEditingId(null);
+    setFormData({
+      name: app.terreiroName || "",
+      username: "",
+      password: "",
+      contactName: app.contactName || "",
+      phone: app.phone || "",
+      tierId: NO_TIER,
+    });
+    setIsDialogOpen(true);
+  };
+
+  const handleSubmitProspect = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!prospectForm.terreiroName) {
+      toast.error("Preencha ao menos o nome do terreiro");
+      return;
+    }
+    createProspectMutation.mutate({
+      terreiroName: prospectForm.terreiroName,
+      contactName: prospectForm.contactName || undefined,
+      phone: prospectForm.phone || undefined,
+      city: prospectForm.city || undefined,
+      instagram: prospectForm.instagram || undefined,
+      address: prospectForm.address || undefined,
+      notes: prospectForm.notes || undefined,
+    });
+  };
+
   const handleCloseDialog = () => {
     setIsDialogOpen(false);
     setEditingId(null);
@@ -160,6 +217,98 @@ export default function Partners() {
               Planos e Preços
             </Button>
           </Link>
+          <Dialog open={isProspectDialogOpen} onOpenChange={setIsProspectDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">
+                <Search className="w-4 h-4 mr-2" />
+                Prospectar Terreiro
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Adicionar Lead de Prospecção</DialogTitle>
+                <DialogDescription>
+                  Terreiro que você achou (Google, Instagram, indicação) pra entrar em contato depois. Cai na
+                  mesma lista de "Solicitações de Parceria" — quando aprovar, já abre o cadastro de login.
+                </DialogDescription>
+              </DialogHeader>
+              <form onSubmit={handleSubmitProspect} className="space-y-4">
+                <div>
+                  <Label htmlFor="prospectName">Nome do terreiro</Label>
+                  <Input
+                    id="prospectName"
+                    value={prospectForm.terreiroName}
+                    onChange={(e) => setProspectForm({ ...prospectForm, terreiroName: e.target.value })}
+                    placeholder="Ex: Terreiro Tia Maria e Cabocla Jupira"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="prospectContact">Pessoa de contato (opcional)</Label>
+                    <Input
+                      id="prospectContact"
+                      value={prospectForm.contactName}
+                      onChange={(e) => setProspectForm({ ...prospectForm, contactName: e.target.value })}
+                      placeholder="Ex: Mãe/Pai de santo"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="prospectPhone">Telefone / WhatsApp (opcional)</Label>
+                    <Input
+                      id="prospectPhone"
+                      value={prospectForm.phone}
+                      onChange={(e) => setProspectForm({ ...prospectForm, phone: e.target.value })}
+                      placeholder="(16) 99999-9999"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="prospectCity">Cidade</Label>
+                    <Input
+                      id="prospectCity"
+                      value={prospectForm.city}
+                      onChange={(e) => setProspectForm({ ...prospectForm, city: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="prospectInstagram">Instagram (opcional)</Label>
+                    <Input
+                      id="prospectInstagram"
+                      value={prospectForm.instagram}
+                      onChange={(e) => setProspectForm({ ...prospectForm, instagram: e.target.value })}
+                      placeholder="@perfil"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="prospectAddress">Endereço (opcional)</Label>
+                  <Input
+                    id="prospectAddress"
+                    value={prospectForm.address}
+                    onChange={(e) => setProspectForm({ ...prospectForm, address: e.target.value })}
+                    placeholder="Rua, número, bairro"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="prospectNotes">Observações (opcional)</Label>
+                  <Input
+                    id="prospectNotes"
+                    value={prospectForm.notes}
+                    onChange={(e) => setProspectForm({ ...prospectForm, notes: e.target.value })}
+                    placeholder="Ex: gira toda sexta, achado no Google Maps"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                  disabled={createProspectMutation.isPending}
+                >
+                  {createProspectMutation.isPending ? "Adicionando..." : "Adicionar à Lista"}
+                </Button>
+              </form>
+            </DialogContent>
+          </Dialog>
           <Dialog open={isDialogOpen} onOpenChange={(open) => (open ? setIsDialogOpen(true) : handleCloseDialog())}>
             <DialogTrigger asChild>
               <Button className="bg-accent text-accent-foreground hover:bg-accent/90">
@@ -255,51 +404,92 @@ export default function Partners() {
         </div>
       </div>
 
-      {pendingApplications.length > 0 && (
+      {applications.length > 0 && (
         <Card className="border-accent/40">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <UserPlus className="w-5 h-5 text-accent" />
-              Solicitações de Parceria ({pendingApplications.length})
-            </CardTitle>
-            <CardDescription>
-              Terreiros que se cadastraram na página "Parceria com a Toca" — entre em contato e crie o login em "Novo Terreiro"
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between flex-wrap gap-2">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-accent" />
+                Solicitações e Prospecção ({visibleApplications.length})
+              </CardTitle>
+              <CardDescription>
+                Terreiros que se cadastraram na página "Parceria com a Toca" ou que você achou e adicionou em
+                "Prospectar Terreiro" — aprovar já abre o cadastro de login pré-preenchido
+              </CardDescription>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setShowAllApplications((v) => !v)}>
+              {showAllApplications ? "Só pendentes" : "Ver todas"}
+            </Button>
           </CardHeader>
           <CardContent className="space-y-2">
-            {pendingApplications.map((app: any) => (
-              <div key={app.id} className="p-3 bg-background rounded-lg border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <p className="font-medium text-foreground text-sm">{app.terreiroName}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {app.contactName} · {app.phone}{app.city ? ` · ${app.city}` : ""}
-                  </p>
-                  {app.notes && <p className="text-xs text-muted-foreground mt-1">"{app.notes}"</p>}
+            {visibleApplications.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhuma solicitação pendente</p>
+            ) : (
+              visibleApplications.map((app: any) => (
+                <div key={app.id} className="p-3 bg-background rounded-lg border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-foreground text-sm">{app.terreiroName}</p>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+                        {SOURCE_LABEL[app.source] ?? app.source}
+                      </Badge>
+                      {app.status !== "pendente" && (
+                        <Badge
+                          className={`text-[10px] px-1.5 py-0 ${app.status === "aprovado" ? "bg-green-900/30 text-green-200" : "bg-red-900/30 text-red-200"}`}
+                        >
+                          {app.status === "aprovado" ? "Aprovado" : "Recusado"}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {app.contactName} · {app.phone}{app.city ? ` · ${app.city}` : ""}
+                      {app.instagram ? ` · ${app.instagram}` : ""}
+                    </p>
+                    {app.address && <p className="text-xs text-muted-foreground">{app.address}</p>}
+                    {app.notes && <p className="text-xs text-muted-foreground mt-1">"{app.notes}"</p>}
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    {app.status === "pendente" && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => handleApproveApplication(app)}
+                          disabled={applicationStatusMutation.isPending}
+                        >
+                          <Check className="w-3.5 h-3.5 mr-1 text-green-500" />
+                          Aprovar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8"
+                          onClick={() => applicationStatusMutation.mutate({ id: app.id, status: "recusado" })}
+                          disabled={applicationStatusMutation.isPending}
+                        >
+                          <X className="w-3.5 h-3.5 mr-1 text-destructive" />
+                          Recusar
+                        </Button>
+                      </>
+                    )}
+                    {app.status !== "pendente" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-8"
+                        onClick={() => {
+                          if (confirm(`Remover "${app.terreiroName}" da lista?`)) deleteApplicationMutation.mutate({ id: app.id });
+                        }}
+                        disabled={deleteApplicationMutation.isPending}
+                      >
+                        <Trash2 className="w-3.5 h-3.5 text-muted-foreground" />
+                      </Button>
+                    )}
+                  </div>
                 </div>
-                <div className="flex gap-2 shrink-0">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8"
-                    onClick={() => applicationStatusMutation.mutate({ id: app.id, status: "aprovado" })}
-                    disabled={applicationStatusMutation.isPending}
-                  >
-                    <Check className="w-3.5 h-3.5 mr-1 text-green-500" />
-                    Aprovar
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-8"
-                    onClick={() => applicationStatusMutation.mutate({ id: app.id, status: "recusado" })}
-                    disabled={applicationStatusMutation.isPending}
-                  >
-                    <X className="w-3.5 h-3.5 mr-1 text-destructive" />
-                    Recusar
-                  </Button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
       )}
