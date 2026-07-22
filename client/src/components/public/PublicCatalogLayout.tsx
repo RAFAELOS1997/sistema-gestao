@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { DecorativeDivider } from "@/components/DecorativeDivider";
-import { MessageCircle, MapPin, ShieldCheck, Truck, Menu } from "lucide-react";
+import { MessageCircle, MapPin, ShieldCheck, Truck, Menu, User } from "lucide-react";
 import { WHATSAPP_LINK } from "@/lib/contact";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { trpc } from "@/lib/trpc";
 
 const NAV_ITEMS = [
   { label: "Pronta Entrega", path: "/loja/produtos" },
@@ -15,6 +16,9 @@ const NAV_ITEMS = [
 export default function PublicCatalogLayout({ children }: { children: React.ReactNode }) {
   const [location, setLocation] = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const meQuery = trpc.account.me.useQuery();
+  const accountPath = meQuery.data ? "/conta" : "/conta/entrar";
+  const accountLabel = meQuery.data ? "Minha Conta" : "Entrar";
 
   const goTo = (path: string) => {
     setLocation(path);
@@ -77,6 +81,12 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
           </nav>
 
           <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => goTo(accountPath)}
+              className="hidden md:inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-2 rounded-md text-foreground/80 hover:text-foreground transition-colors"
+            >
+              <User className="w-4 h-4" /> {accountLabel}
+            </button>
             <a
               href={WHATSAPP_LINK}
               target="_blank"
@@ -110,6 +120,12 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
                       {item.label}
                     </button>
                   ))}
+                  <button
+                    onClick={() => goTo(accountPath)}
+                    className="text-left px-3 py-3 rounded-md text-sm font-semibold text-foreground hover:bg-muted flex items-center gap-2 border-t border-border mt-1 pt-4"
+                  >
+                    <User className="w-4 h-4 text-accent" /> {accountLabel}
+                  </button>
                   <a
                     href={WHATSAPP_LINK}
                     target="_blank"

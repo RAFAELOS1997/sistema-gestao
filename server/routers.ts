@@ -9,7 +9,10 @@ import { hashPassword, verifyPassword } from "./_core/password";
 import { sdk } from "./_core/sdk";
 import { fetchSupplierProductStatus, fetchSupplierProductImage, fetchSupplierListingPage, searchSupplierProducts } from "./_core/supplierScraper";
 import { systemRouter } from "./_core/systemRouter";
-import { protectedProcedure, publicProcedure, router, terreiroProcedure } from "./_core/trpc";
+import { protectedProcedure, publicProcedure, router, terreiroProcedure, customerProcedure } from "./_core/trpc";
+import { CUSTOMER_COOKIE_NAME, signCustomerSession } from "./_core/customerAuth";
+import { ENV } from "./_core/env";
+import { verifyGoogleIdToken } from "./_core/googleAuth";
 import { TERREIRO_COOKIE_NAME, signTerreiroSession } from "./_core/terreiroAuth";
 import { searchOsmTerreiros } from "./_core/osmProspectSearch";
 import { computeStockDeliveryCents } from "./_core/deliveryPricing";
@@ -116,6 +119,13 @@ import {
   updatePublicOrderTracking,
   updatePartnerOrderTracking,
   getTerreiroByReferralCode,
+  getCustomerByEmail,
+  getCustomerByGoogleId,
+  getCustomerById,
+  createCustomer,
+  updateCustomer,
+  touchCustomerLastSignedIn,
+  listCustomerOrders,
   fulfillPublicOrderForCharge,
   recalculatePartnerTierByOrders,
   ensureMinimumBronzeForConsignment,
@@ -2207,6 +2217,157 @@ const portalRouter = router({
   }),
 });
 
+// ─── Área do Cliente (login na loja pública) ───────────────────────────────────
+// Conta OPCIONAL do cliente final — sessão própria (cookie customer_session_id),
+// nunca se mistura com a sessão de staff nem de parceiro. Cadastro por e-mail/
+// senha ou "Entrar com Google" (token verificado em server/_core/googleAuth.ts).
+// Continua dando pra comprar sem conta (checkout de visitante inalterado).
+
+const accountRouter = router({
+  // hasGoogleLogin: o client só mostra o botão do Google se isso vier true
+  // (ou seja, se o Rafael já configurou o GOOGLE_CLIENT_ID).
+  config: publicProcedure.query(() => ({
+    hasGoogleLogin: !!ENV.googleClientId,
+    googleClientId: ENV.googleClientId || null,
+  })),
+
+  me: publicProcedure.query(({ ctx }) => {
+    if (!ctx.customer) return null;
+    return {
+      id: ctx.customer.id,
+      name: ctx.customer.name,
+      email: ctx.customer.email,
+      phone: ctx.customer.phone,
+      hasPassword: !!ctx.customer.passwordHash,
+      hasGoogle: !!ctx.customer.googleId,
+      shippingZipCode: ctx.customer.shippingZipCode,
+      shippingStreet: ctx.customer.shippingStreet,
+      shippingNumber: ctx.customer.shippingNumber,
+      shippingComplement: ctx.customer.shippingComplement,
+      shippingNeighborhood: ctx.customer.shippingNeighborhood,
+      shippingCity: ctx.customer.shippingCity,
+      shippingState: ctx.customer.shippingState,
+    };
+  }),
+
+  signup: publicProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(255),
+        email: z.string().email(),
+        password: z.string().min(6).max(100),
+        phone: z.string().max(20).optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const existing = await getCustomerByEmail(input.email);
+      if (existing) throw new TRPCError({ code: "BAD_REQUEST", message: "Já existe uma conta com esse e-mail" });
+      const passwordHash = await hashPassword(input.password);
+      const customer = await createCustomer({
+        name: input.name,
+        email: input.email,
+        passwordHash,
+        phone: input.phone || null,
+      });
+      if (!customer) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Falha ao criar conta" });
+      const sessionToken = await signCustomerSession(customer.id);
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(CUSTOMER_COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      await touchCustomerLastSignedIn(customer.id);
+      return { success: true, name: customer.name } as const;
+    }),
+
+  login: publicProcedure
+    .input(z.object({ email: z.string().email(), password: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const customer = await getCustomerByEmail(input.email);
+      if (!customer || !customer.isActive || !customer.passwordHash || !(await verifyPassword(input.password, customer.passwordHash))) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "E-mail ou senha inválidos" });
+      }
+      const sessionToken = await signCustomerSession(customer.id);
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(CUSTOMER_COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      await touchCustomerLastSignedIn(customer.id);
+      return { success: true, name: customer.name } as const;
+    }),
+
+  // "Entrar com Google" — recebe o ID token do Google Identity Services,
+  // verifica a assinatura (server/_core/googleAuth.ts) e cria a conta na
+  // primeira vez (ou entra, se já existir pelo e-mail ou pelo google id).
+  loginWithGoogle: publicProcedure
+    .input(z.object({ idToken: z.string().min(1) }))
+    .mutation(async ({ input, ctx }) => {
+      const profile = await verifyGoogleIdToken(input.idToken);
+      if (!profile) throw new TRPCError({ code: "UNAUTHORIZED", message: "Não foi possível confirmar o login do Google" });
+
+      let customer = await getCustomerByGoogleId(profile.googleId);
+      if (!customer) {
+        const byEmail = await getCustomerByEmail(profile.email);
+        if (byEmail) {
+          await updateCustomer(byEmail.id, { googleId: profile.googleId });
+          customer = await getCustomerById(byEmail.id);
+        } else {
+          customer = await createCustomer({ name: profile.name, email: profile.email, googleId: profile.googleId });
+        }
+      }
+      if (!customer || !customer.isActive) {
+        throw new TRPCError({ code: "UNAUTHORIZED", message: "Conta indisponível" });
+      }
+
+      const sessionToken = await signCustomerSession(customer.id);
+      const cookieOptions = getSessionCookieOptions(ctx.req);
+      ctx.res.cookie(CUSTOMER_COOKIE_NAME, sessionToken, { ...cookieOptions, maxAge: ONE_YEAR_MS });
+      await touchCustomerLastSignedIn(customer.id);
+      return { success: true, name: customer.name } as const;
+    }),
+
+  logout: publicProcedure.mutation(({ ctx }) => {
+    const cookieOptions = getSessionCookieOptions(ctx.req);
+    ctx.res.clearCookie(CUSTOMER_COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
+    return { success: true } as const;
+  }),
+
+  updateProfile: customerProcedure
+    .input(
+      z.object({
+        name: z.string().min(1).max(255).optional(),
+        phone: z.string().max(20).optional(),
+        shippingAddress: shippingAddressSchema.optional(),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await updateCustomer(ctx.customer.id, {
+        name: input.name,
+        phone: input.phone,
+        shippingZipCode: input.shippingAddress?.zipCode,
+        shippingStreet: input.shippingAddress?.street,
+        shippingNumber: input.shippingAddress?.number,
+        shippingComplement: input.shippingAddress?.complement,
+        shippingNeighborhood: input.shippingAddress?.neighborhood,
+        shippingCity: input.shippingAddress?.city,
+        shippingState: input.shippingAddress?.state,
+      });
+      return { success: true };
+    }),
+
+  changePassword: customerProcedure
+    .input(z.object({ currentPassword: z.string().optional(), newPassword: z.string().min(6).max(100) }))
+    .mutation(async ({ input, ctx }) => {
+      // Quem só tem login do Google ainda não tem senha — pode criar uma
+      // direto, sem precisar confirmar a "atual" (não existe uma ainda).
+      if (ctx.customer.passwordHash) {
+        if (!input.currentPassword || !(await verifyPassword(input.currentPassword, ctx.customer.passwordHash))) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Senha atual incorreta" });
+        }
+      }
+      const passwordHash = await hashPassword(input.newPassword);
+      await updateCustomer(ctx.customer.id, { passwordHash });
+      return { success: true };
+    }),
+
+  orders: customerProcedure.query(({ ctx }) => listCustomerOrders(ctx.customer.id)),
+});
+
 // ─── Catálogo Público (loja online, sem login) ─────────────────────────────────
 // Página pública equivalente ao Portal do Parceiro, mas sem sessão nenhuma —
 // preço cheio (sem desconto de plano) na aba Produtos, e preço cheio + 5% na
@@ -2293,7 +2454,7 @@ const publicStoreRouter = router({
           couponCode: z.string().max(30).optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         const config = await getSystemConfig();
         const handle = config?.infinitePayHandle;
         if (!handle) {
@@ -2355,6 +2516,7 @@ const publicStoreRouter = router({
         const order = await createPublicOrder({
           customerName: input.customerName,
           customerPhone: input.customerPhone,
+          customerId: ctx.customer?.id ?? null,
           items: orderItems,
           paymentMethod: "infinitepay",
           shippingMethod: input.shippingMethod,
@@ -2470,7 +2632,7 @@ const publicStoreRouter = router({
           couponCode: z.string().max(30).optional(),
         })
       )
-      .mutation(async ({ input }) => {
+      .mutation(async ({ input, ctx }) => {
         if (input.shippingMethod === "envio" && !input.shippingAddress) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o endereço de entrega" });
         }
@@ -2549,6 +2711,7 @@ const publicStoreRouter = router({
         const order = await createPublicOrder({
           customerName: input.customerName,
           customerPhone: input.customerPhone,
+          customerId: ctx.customer?.id ?? null,
           items: orderItems,
           shippingMethod: input.shippingMethod,
           shippingCents,
@@ -2883,6 +3046,7 @@ export const appRouter = router({
   partnerOrders: partnerOrdersRouter,
   publicStore: publicStoreRouter,
   publicOrders: publicOrdersRouter,
+  account: accountRouter,
   partnerApplications: partnerApplicationsRouter,
   infinitePay: infinitePayRouter,
   paymentMethods: paymentMethodsRouter,

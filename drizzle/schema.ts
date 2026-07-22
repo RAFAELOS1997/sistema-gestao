@@ -487,6 +487,9 @@ export const publicOrders = mysqlTable("publicOrders", {
   id: int("id").autoincrement().primaryKey(),
   customerName: varchar("customerName", { length: 255 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
+  // Preenchido quando o pedido foi feito por um cliente logado (área do
+  // usuário) — nulo pra pedido de visitante sem conta (continua permitido).
+  customerId: int("customerId"),
   subtotal: int("subtotal").notNull(), // em centavos, só os itens (sem frete)
   status: mysqlEnum("status", ["pendente", "confirmado", "entregue", "cancelado"]).notNull().default("pendente"),
   paymentMethod: varchar("paymentMethod", { length: 50 }), // "infinitepay" pros pedidos de Pronta Entrega já pagos, null pros pedidos por encomenda (Fazer Pedidos)
@@ -560,3 +563,31 @@ export const partnerApplications = mysqlTable("partnerApplications", {
 
 export type PartnerApplication = typeof partnerApplications.$inferSelect;
 export type InsertPartnerApplication = typeof partnerApplications.$inferInsert;
+
+// ─── Contas de cliente (área do usuário na loja pública) ──────────────────────
+// Login opcional do cliente final — sessão própria (cookie customer_session_id),
+// separada de users (staff) e terreiros (parceiro). passwordHash é nulo pra
+// quem só entra com Google; googleId é nulo pra quem só usa e-mail/senha —
+// uma conta pode ter os dois, ou só um dos dois.
+export const customers = mysqlTable("customers", {
+  id: int("id").autoincrement().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  passwordHash: varchar("passwordHash", { length: 255 }),
+  googleId: varchar("googleId", { length: 100 }).unique(),
+  phone: varchar("phone", { length: 20 }),
+  shippingZipCode: varchar("shippingZipCode", { length: 9 }),
+  shippingStreet: varchar("shippingStreet", { length: 255 }),
+  shippingNumber: varchar("shippingNumber", { length: 20 }),
+  shippingComplement: varchar("shippingComplement", { length: 100 }),
+  shippingNeighborhood: varchar("shippingNeighborhood", { length: 100 }),
+  shippingCity: varchar("shippingCity", { length: 100 }),
+  shippingState: varchar("shippingState", { length: 2 }),
+  isActive: int("isActive").default(1).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn"),
+});
+
+export type Customer = typeof customers.$inferSelect;
+export type InsertCustomer = typeof customers.$inferInsert;

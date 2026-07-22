@@ -8,6 +8,7 @@ function createPublicContext(): TrpcContext {
     user: null,
     terreiro: null,
     teamUserId: null,
+    customer: null,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { cookie: () => {}, clearCookie: () => {} } as unknown as TrpcContext["res"],
   };
@@ -32,6 +33,7 @@ function createTerreiroContext(tierId: number | null = 1): TrpcContext {
       lastSignedIn: null,
     },
     teamUserId: null,
+    customer: null,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { cookie: () => {}, clearCookie: () => {} } as unknown as TrpcContext["res"],
   };
@@ -53,6 +55,7 @@ function createStaffContext(): TrpcContext {
     },
     terreiro: null,
     teamUserId: null,
+    customer: null,
     req: { protocol: "https", headers: {} } as TrpcContext["req"],
     res: { cookie: () => {}, clearCookie: () => {} } as unknown as TrpcContext["res"],
   };
@@ -237,5 +240,27 @@ describe("partnerApplications", () => {
 
     const staffCaller = appRouter.createCaller(createStaffContext());
     await expect(staffCaller.partnerApplications.list()).resolves.toEqual([]);
+  });
+});
+
+describe("account (área do cliente)", () => {
+  it("me/config são acessíveis sem sessão", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    await expect(caller.account.me()).resolves.toBeNull();
+    await expect(caller.account.config()).resolves.toMatchObject({ hasGoogleLogin: false });
+  });
+
+  it("orders/updateProfile/changePassword exigem sessão de cliente", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    await expect(caller.account.orders()).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.account.updateProfile({ name: "Teste" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    await expect(caller.account.changePassword({ newPassword: "123456" })).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("signup falha sem quebrar o servidor quando não há banco (sem sessão exigida)", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    await expect(
+      caller.account.signup({ name: "Cliente Teste", email: "teste@example.com", password: "123456" })
+    ).rejects.toBeTruthy();
   });
 });

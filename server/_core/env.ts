@@ -7,4 +7,8 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+  // Login com Google (área do cliente na loja pública) — só o Client ID,
+  // gratuito de criar no Google Cloud e sem precisar de cartão. Enquanto não
+  // for configurado, o botão "Entrar com Google" some sozinho no site.
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
 };

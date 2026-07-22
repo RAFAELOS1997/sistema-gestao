@@ -16,6 +16,7 @@ import {
   partnerOrders, partnerOrderItems,
   publicOrders, publicOrderItems,
   partnerApplications, InsertPartnerApplication,
+  customers, InsertCustomer,
 } from "../drizzle/schema";
 import { ENV } from "./_core/env";
 import { notifyProntaEntregaPaid } from "./_core/whatsapp";
@@ -699,6 +700,42 @@ export async function runStartupMigrations() {
     await seedProspectionLeads();
   } catch (error: any) {
     console.error("[migrations] seedProspectionLeads:", error);
+  }
+
+  // Área do cliente (login na loja pública) — conta opcional pra acompanhar
+  // pedidos, com e-mail/senha ou Google.
+  try {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS customers (
+        id int AUTO_INCREMENT NOT NULL,
+        name varchar(255) NOT NULL,
+        email varchar(320) NOT NULL,
+        passwordHash varchar(255),
+        googleId varchar(100),
+        phone varchar(20),
+        shippingZipCode varchar(9),
+        shippingStreet varchar(255),
+        shippingNumber varchar(20),
+        shippingComplement varchar(100),
+        shippingNeighborhood varchar(100),
+        shippingCity varchar(100),
+        shippingState varchar(2),
+        isActive int NOT NULL DEFAULT 1,
+        createdAt timestamp NOT NULL DEFAULT (now()),
+        updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
+        lastSignedIn timestamp NULL,
+        PRIMARY KEY (id),
+        UNIQUE KEY customers_email_unique (email),
+        UNIQUE KEY customers_googleId_unique (googleId)
+      )
+    `);
+  } catch (error: any) {
+    console.error("[migrations] customers:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE publicOrders ADD COLUMN customerId int`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] publicOrders.customerId:", error);
   }
 
   console.log("[migrations] Verificação de schema concluída.");
@@ -2180,6 +2217,7 @@ export async function createPublicOrder(data: {
   couponCode?: string | null;
   referredByTerreiroId?: number | null;
   discountCents?: number;
+  customerId?: number | null;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2188,6 +2226,7 @@ export async function createPublicOrder(data: {
   const orderResult = await db.insert(publicOrders).values({
     customerName: data.customerName,
     customerPhone: data.customerPhone,
+    customerId: data.customerId ?? null,
     subtotal,
     status: "pendente",
     paymentMethod: data.paymentMethod ?? null,
@@ -2218,6 +2257,66 @@ export async function createPublicOrder(data: {
     }))
   );
   return { id: orderId, subtotal, shippingCents: data.shippingCents };
+}
+
+// ─── Contas de cliente (área do usuário na loja pública) ──────────────────────
+
+export async function getCustomerByEmail(email: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(customers).where(eq(customers.email, email.trim().toLowerCase())).limit(1);
+  return result[0] ?? null;
+}
+
+export async function getCustomerByGoogleId(googleId: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(customers).where(eq(customers.googleId, googleId)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function getCustomerById(id: number) {
+  const db = await getDb();
+  if (!db) return null;
+  const result = await db.select().from(customers).where(eq(customers.id, id)).limit(1);
+  return result[0] ?? null;
+}
+
+export async function createCustomer(data: Omit<InsertCustomer, "id" | "createdAt" | "updatedAt" | "lastSignedIn" | "isActive" | "email"> & { email: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const email = data.email.trim().toLowerCase();
+  const existing = await getCustomerByEmail(email);
+  if (existing) throw new Error("Já existe uma conta com esse e-mail");
+  const result = await db.insert(customers).values({ ...data, email });
+  const id = ((result as any)[0]?.insertId ?? (result as any).insertId) as number;
+  return getCustomerById(id);
+}
+
+export async function updateCustomer(
+  id: number,
+  data: Partial<Omit<InsertCustomer, "id" | "createdAt" | "updatedAt" | "email">>
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(customers).set(data).where(eq(customers.id, id));
+}
+
+export async function touchCustomerLastSignedIn(id: number) {
+  const db = await getDb();
+  if (!db) return;
+  await db.update(customers).set({ lastSignedIn: new Date() }).where(eq(customers.id, id));
+}
+
+export async function listCustomerOrders(customerId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  const orders = await db.select().from(publicOrders).where(eq(publicOrders.customerId, customerId)).orderBy(desc(publicOrders.createdAt));
+  const items = await db.select().from(publicOrderItems);
+  return orders.map((order) => ({
+    ...order,
+    items: items.filter((i) => i.publicOrderId === order.id),
+  }));
 }
 
 export async function updatePublicOrderTracking(id: number, trackingCode: string | null, carrier: string | null) {

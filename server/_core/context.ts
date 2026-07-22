@@ -1,9 +1,10 @@
 import { parse as parseCookieHeader } from "cookie";
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import type { Terreiro, User } from "../../drizzle/schema";
-import { getTerreiroById } from "../db";
+import type { Terreiro, User, Customer } from "../../drizzle/schema";
+import { getTerreiroById, getCustomerById } from "../db";
 import { sdk } from "./sdk";
 import { TERREIRO_COOKIE_NAME, verifyTerreiroSession } from "./terreiroAuth";
+import { CUSTOMER_COOKIE_NAME, verifyCustomerSession } from "./customerAuth";
 
 export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
@@ -15,6 +16,7 @@ export type TrpcContext = {
   // mesmas permissões, isso só importa pra saber de quem é a senha na hora
   // de trocar.
   teamUserId: number | null;
+  customer: Customer | null;
 };
 
 export async function createContext(
@@ -46,11 +48,24 @@ export async function createContext(
     teamUserId = null;
   }
 
+  let customer: Customer | null = null;
+  try {
+    const cookies = parseCookieHeader(opts.req.headers.cookie ?? "");
+    const session = await verifyCustomerSession(cookies[CUSTOMER_COOKIE_NAME]);
+    if (session) {
+      const found = await getCustomerById(session.customerId);
+      if (found && found.isActive) customer = found;
+    }
+  } catch (error) {
+    customer = null;
+  }
+
   return {
     req: opts.req,
     res: opts.res,
     user,
     terreiro,
     teamUserId,
+    customer,
   };
 }

@@ -22,6 +22,8 @@ import PublicCatalogLayout from "./components/public/PublicCatalogLayout";
 import PublicCatalogProducts from "./pages/public/PublicCatalogProducts";
 import PublicGenerateOrder from "./pages/public/PublicGenerateOrder";
 import PublicPartnership from "./pages/public/PublicPartnership";
+import AccountLogin from "./pages/public/AccountLogin";
+import AccountDashboard from "./pages/public/AccountDashboard";
 import PublicOrders from "./pages/PublicOrders";
 import { PortalCartProvider } from "./contexts/PortalCartContext";
 import { PublicCartProvider } from "./contexts/PublicCartContext";
@@ -150,6 +152,18 @@ function Router() {
       <Route path="/parceria">
         <PublicCatalogLayout>
           <PublicPartnership />
+        </PublicCatalogLayout>
+      </Route>
+
+      {/* Área do Cliente — login opcional pra acompanhar pedidos */}
+      <Route path="/conta/entrar">
+        <PublicCatalogLayout>
+          <AccountLogin />
+        </PublicCatalogLayout>
+      </Route>
+      <Route path="/conta">
+        <PublicCatalogLayout>
+          <AccountDashboard />
         </PublicCatalogLayout>
       </Route>
 
