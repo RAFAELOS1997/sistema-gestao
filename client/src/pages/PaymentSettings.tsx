@@ -66,38 +66,37 @@ export default function PaymentSettings() {
     }
   };
 
-  // ─── Frete (Fase 1 do plano de expansão nacional) ─────────────────────────
+  // ─── Frete (entrega própria — só Ribeirão Preto e região por enquanto) ────
   const shippingConfigQuery = trpc.settings.getShippingConfig.useQuery();
   const updateShippingMutation = trpc.settings.updateShippingConfig.useMutation();
   const [shippingForm, setShippingForm] = useState({
-    shippingLocalCity: "",
-    shippingLocalState: "",
-    shippingLocalReais: "0",
-    shippingStateReais: "0",
-    shippingNationalReais: "0",
+    shippingOriginZipCode: "",
+    shippingPerKmReais: "1.50",
+    shippingSupplierFixedReais: "40.00",
   });
 
   useEffect(() => {
     if (!shippingConfigQuery.data) return;
     const c = shippingConfigQuery.data;
     setShippingForm({
-      shippingLocalCity: c.shippingLocalCity,
-      shippingLocalState: c.shippingLocalState,
-      shippingLocalReais: (c.shippingLocalCents / 100).toFixed(2),
-      shippingStateReais: (c.shippingStateCents / 100).toFixed(2),
-      shippingNationalReais: (c.shippingNationalCents / 100).toFixed(2),
+      shippingOriginZipCode: c.shippingOriginZipCode,
+      shippingPerKmReais: (c.shippingPerKmCents / 100).toFixed(2),
+      shippingSupplierFixedReais: (c.shippingSupplierFixedCents / 100).toFixed(2),
     });
   }, [shippingConfigQuery.data]);
 
   const handleSaveShipping = async () => {
     const toCents = (v: string) => Math.round(parseFloat(v.replace(",", ".")) * 100) || 0;
+    const zip = shippingForm.shippingOriginZipCode.replace(/\D/g, "");
+    if (zip.length !== 8) {
+      toast.error("CEP de origem inválido — precisa ter 8 dígitos");
+      return;
+    }
     try {
       await updateShippingMutation.mutateAsync({
-        shippingLocalCity: shippingForm.shippingLocalCity.trim() || "Ribeirão Preto",
-        shippingLocalState: shippingForm.shippingLocalState.trim().toUpperCase() || "SP",
-        shippingLocalCents: toCents(shippingForm.shippingLocalReais),
-        shippingStateCents: toCents(shippingForm.shippingStateReais),
-        shippingNationalCents: toCents(shippingForm.shippingNationalReais),
+        shippingOriginZipCode: zip,
+        shippingPerKmCents: toCents(shippingForm.shippingPerKmReais),
+        shippingSupplierFixedCents: toCents(shippingForm.shippingSupplierFixedReais),
       });
       toast.success("Frete atualizado!");
       shippingConfigQuery.refetch();
@@ -206,7 +205,7 @@ export default function PaymentSettings() {
         </CardContent>
       </Card>
 
-      {/* Frete (Fase 1 do plano de expansão nacional) */}
+      {/* Frete — entrega própria, só Ribeirão Preto e região por enquanto */}
       <Card className="bg-card border-border">
         <CardHeader>
           <CardTitle className="text-foreground flex items-center gap-2">
@@ -214,73 +213,45 @@ export default function PaymentSettings() {
             Frete
           </CardTitle>
           <CardDescription>
-            Valor fixo cobrado do cliente quando escolhe "Receber em casa" em Fazer Pedidos ou Pronta Entrega — sem
-            integração nenhuma, é só uma tabela de 3 faixas. Deixe R$ 0,00 pra qualquer faixa que ainda não quiser cobrar.
+            Por enquanto a entrega é só em Ribeirão Preto (feita por você, não pelos Correios). Item do seu estoque
+            cobra pela distância real até o cliente; item do fornecedor cobra um valor fixo, pra cobrir a ida buscar
+            com o fornecedor antes de entregar.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="shipping-origin-zip" className="text-foreground">CEP de onde você entrega (sua loja)</Label>
+            <Input
+              id="shipping-origin-zip"
+              value={shippingForm.shippingOriginZipCode}
+              onChange={(e) => setShippingForm({ ...shippingForm, shippingOriginZipCode: e.target.value.replace(/\D/g, "").slice(0, 8) })}
+              className="bg-background border-border text-foreground max-w-xs"
+              placeholder="14090210"
+              inputMode="numeric"
+            />
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="shipping-local-city" className="text-foreground">Cidade da loja</Label>
-              <Input
-                id="shipping-local-city"
-                value={shippingForm.shippingLocalCity}
-                onChange={(e) => setShippingForm({ ...shippingForm, shippingLocalCity: e.target.value })}
-                className="bg-background border-border text-foreground"
-                placeholder="Ribeirão Preto"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="shipping-local-state" className="text-foreground">Estado (UF)</Label>
-              <Input
-                id="shipping-local-state"
-                value={shippingForm.shippingLocalState}
-                onChange={(e) => setShippingForm({ ...shippingForm, shippingLocalState: e.target.value.toUpperCase().slice(0, 2) })}
-                className="bg-background border-border text-foreground"
-                placeholder="SP"
-                maxLength={2}
-              />
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="shipping-local-cents" className="text-foreground text-sm">
-                Frete pra {shippingForm.shippingLocalCity || "sua cidade"}
-              </Label>
+              <Label htmlFor="shipping-per-km" className="text-foreground text-sm">Frete por KM (itens do seu estoque)</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground select-none text-sm">R$</span>
                 <Input
-                  id="shipping-local-cents"
-                  value={shippingForm.shippingLocalReais}
-                  onChange={(e) => setShippingForm({ ...shippingForm, shippingLocalReais: e.target.value })}
+                  id="shipping-per-km"
+                  value={shippingForm.shippingPerKmReais}
+                  onChange={(e) => setShippingForm({ ...shippingForm, shippingPerKmReais: e.target.value })}
                   className="bg-background border-border text-foreground pl-9"
                   inputMode="decimal"
                 />
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="shipping-state-cents" className="text-foreground text-sm">
-                Frete pro resto de {shippingForm.shippingLocalState || "SP"}
-              </Label>
+              <Label htmlFor="shipping-supplier-fixed" className="text-foreground text-sm">Frete fixo (itens do fornecedor)</Label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground select-none text-sm">R$</span>
                 <Input
-                  id="shipping-state-cents"
-                  value={shippingForm.shippingStateReais}
-                  onChange={(e) => setShippingForm({ ...shippingForm, shippingStateReais: e.target.value })}
-                  className="bg-background border-border text-foreground pl-9"
-                  inputMode="decimal"
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="shipping-national-cents" className="text-foreground text-sm">Frete pro resto do Brasil</Label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground select-none text-sm">R$</span>
-                <Input
-                  id="shipping-national-cents"
-                  value={shippingForm.shippingNationalReais}
-                  onChange={(e) => setShippingForm({ ...shippingForm, shippingNationalReais: e.target.value })}
+                  id="shipping-supplier-fixed"
+                  value={shippingForm.shippingSupplierFixedReais}
+                  onChange={(e) => setShippingForm({ ...shippingForm, shippingSupplierFixedReais: e.target.value })}
                   className="bg-background border-border text-foreground pl-9"
                   inputMode="decimal"
                 />

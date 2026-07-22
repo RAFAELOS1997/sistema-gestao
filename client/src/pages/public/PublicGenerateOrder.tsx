@@ -9,30 +9,12 @@ import { Search, Plus, Minus, ChevronDown, ChevronUp, ShoppingCart, CheckCircle2
 import { toast } from "sonner";
 import { usePublicCart } from "@/contexts/PublicCartContext";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
-import { ShippingMethodPicker, ShippingAddressForm, EMPTY_ADDRESS, isAddressComplete, ShippingMethod, ShippingAddress } from "@/components/public/ShippingFields";
+import { ShippingMethodPicker, ShippingAddressForm, EMPTY_ADDRESS, isAddressComplete, isRibeiraoPreto, ShippingMethod, ShippingAddress } from "@/components/public/ShippingFields";
 import { CouponField } from "@/components/public/CouponField";
 
 type Source = "catalogo" | "estoque";
 
 const cartKey = (source: Source, id: number) => `${source}:${id}`;
-
-// Espelha computeShippingCents do servidor — só pra mostrar uma prévia antes
-// de enviar; o valor cobrado de verdade é sempre recalculado lá.
-function previewShippingCents(
-  method: ShippingMethod,
-  city: string,
-  state: string,
-  info: { localCity: string; localState: string; localCents: number; stateCents: number; nationalCents: number } | undefined
-): number {
-  if (method === "retirada" || !info) return 0;
-  const normCity = city.trim().toLowerCase();
-  const normState = state.trim().toUpperCase();
-  if (normState && normState === info.localState.toUpperCase()) {
-    if (normCity && normCity === info.localCity.trim().toLowerCase()) return info.localCents;
-    return info.stateCents;
-  }
-  return info.nationalCents;
-}
 
 export default function PublicGenerateOrder() {
   const [source, setSource] = useState<Source>("catalogo");
@@ -50,9 +32,7 @@ export default function PublicGenerateOrder() {
   const catalogQuery = trpc.publicStore.orderCatalog.catalog.useQuery();
   const stockQuery = trpc.publicStore.orderCatalog.stock.useQuery();
   const minimumQuery = trpc.publicStore.orders.minimumCents.useQuery();
-  const shippingInfoQuery = trpc.publicStore.shipping.info.useQuery();
   const minimumCents = minimumQuery.data ?? 15000;
-  const shippingCentsPreview = previewShippingCents(shippingMethod, address.city, address.state, shippingInfoQuery.data);
 
   const items = source === "catalogo" ? catalogQuery.data ?? [] : stockQuery.data ?? [];
   const isLoading = source === "catalogo" ? catalogQuery.isLoading : stockQuery.isLoading;
@@ -98,6 +78,17 @@ export default function PublicGenerateOrder() {
   const catalogSubtotal = cartItems.filter((i) => i.source === "catalogo").reduce((sum, i) => sum + i.total, 0);
   const missingForMinimum = catalogSubtotal > 0 ? Math.max(0, minimumCents - catalogSubtotal) : 0;
 
+  const zipDigits = address.zipCode.replace(/\D/g, "");
+  const shippingPreviewQuery = trpc.publicStore.shipping.preview.useQuery(
+    {
+      zipCode: zipDigits,
+      hasEstoqueItems: cartItems.some((i) => i.source === "estoque"),
+      hasCatalogoItems: cartItems.some((i) => i.source === "catalogo"),
+    },
+    { enabled: shippingMethod === "envio" && zipDigits.length === 8 && cartItems.length > 0 }
+  );
+  const shippingCentsPreview = shippingMethod === "envio" ? shippingPreviewQuery.data?.shippingCents ?? null : 0;
+
   const handleSubmit = () => {
     if (cartItems.length === 0) {
       toast.error("Adicione ao menos um item ao pedido");
@@ -113,6 +104,10 @@ export default function PublicGenerateOrder() {
     }
     if (shippingMethod === "envio" && !isAddressComplete(address)) {
       toast.error("Preencha o endereço de entrega completo (CEP, número, bairro, cidade e UF)");
+      return;
+    }
+    if (shippingMethod === "envio" && !isRibeiraoPreto(address.city)) {
+      toast.error("Por enquanto só entregamos em Ribeirão Preto. Pra outras cidades, escolha retirar na loja.");
       return;
     }
     createOrderMutation.mutate({
@@ -164,7 +159,7 @@ export default function PublicGenerateOrder() {
       </div>
 
       <p className="text-xs text-accent bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
-        Entregamos pra todo o Brasil pelos Correios — ou você pode retirar direto na loja, em Ribeirão Preto.
+        Por enquanto entregamos só em Ribeirão Preto (entrega própria) — ou você pode retirar direto na loja.
       </p>
 
       <div className="flex gap-2 border-b border-border">
@@ -355,9 +350,13 @@ export default function PublicGenerateOrder() {
                   <p className="text-xs text-amber-400 mb-2 text-center">
                     Faltam R$ {(missingForMinimum / 100).toFixed(2)} pra atingir o pedido mínimo de R$ {(minimumCents / 100).toFixed(2)} nos itens do fornecedor
                   </p>
-                ) : shippingMethod === "envio" && shippingCentsPreview > 0 ? (
+                ) : shippingMethod === "envio" && zipDigits.length === 8 ? (
                   <p className="text-xs text-muted-foreground mb-2 text-center">
-                    + R$ {(shippingCentsPreview / 100).toFixed(2)} de frete estimado
+                    {shippingPreviewQuery.isFetching
+                      ? "Calculando frete..."
+                      : shippingCentsPreview != null
+                        ? `+ R$ ${(shippingCentsPreview / 100).toFixed(2)} de frete estimado`
+                        : "Não conseguimos calcular o frete pra esse CEP"}
                   </p>
                 ) : null}
                 <Button

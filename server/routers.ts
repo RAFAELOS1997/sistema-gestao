@@ -12,6 +12,7 @@ import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router, terreiroProcedure } from "./_core/trpc";
 import { TERREIRO_COOKIE_NAME, signTerreiroSession } from "./_core/terreiroAuth";
 import { searchOsmTerreiros } from "./_core/osmProspectSearch";
+import { computeStockDeliveryCents } from "./_core/deliveryPricing";
 import { notifyPartnerOrder, notifyPublicOrder, notifyConsignmentRequest, notifyPartnerApplication } from "./_core/whatsapp";
 import {
   createProduct,
@@ -1060,28 +1061,23 @@ const settingsRouter = router({
       return { success: true };
     }),
 
-  // Frete fixo por região (Fase 1 do plano de expansão nacional) — 3 faixas
-  // simples: local (a cidade/estado da loja), resto do mesmo estado, resto
-  // do Brasil. Tudo em centavos, 0 = grátis.
+  // Entrega própria (Fase 1, ajustada) — só Ribeirão Preto e região por
+  // enquanto, sem Correios/frete nacional ainda. Tudo em centavos.
   getShippingConfig: protectedProcedure.query(async () => {
     const config = await getSystemConfig();
     return {
-      shippingLocalCity: config?.shippingLocalCity ?? "Ribeirão Preto",
-      shippingLocalState: config?.shippingLocalState ?? "SP",
-      shippingLocalCents: config?.shippingLocalCents ?? 0,
-      shippingStateCents: config?.shippingStateCents ?? 0,
-      shippingNationalCents: config?.shippingNationalCents ?? 0,
+      shippingOriginZipCode: config?.shippingOriginZipCode ?? "14090210",
+      shippingPerKmCents: config?.shippingPerKmCents ?? 150,
+      shippingSupplierFixedCents: config?.shippingSupplierFixedCents ?? 4000,
     };
   }),
 
   updateShippingConfig: protectedProcedure
     .input(
       z.object({
-        shippingLocalCity: z.string().min(1).max(100),
-        shippingLocalState: z.string().length(2),
-        shippingLocalCents: z.number().int().min(0),
-        shippingStateCents: z.number().int().min(0),
-        shippingNationalCents: z.number().int().min(0),
+        shippingOriginZipCode: z.string().min(8).max(9),
+        shippingPerKmCents: z.number().int().min(0),
+        shippingSupplierFixedCents: z.number().int().min(0),
       })
     )
     .mutation(async ({ input, ctx }) => {
@@ -1271,34 +1267,53 @@ const computePublicOrderItemPrice = (costCents: number, fullPriceCents: number) 
   return Math.max(markedUpPrice, minPrice);
 };
 
-// Frete fixo por região (Fase 1 do plano de expansão nacional) — 3 faixas
-// simples configuradas em Pagamentos > Frete, sem nenhuma integração externa.
-// Sempre recalculado aqui no servidor a partir do endereço, nunca confia num
-// valor de frete vindo do cliente.
+// Entrega própria por enquanto — só Ribeirão Preto e região, não é frete
+// nacional via Correios (ainda não configurado). Item do ESTOQUE cobra pela
+// distância real (Rafael/motoboy entrega); item do FORNECEDOR cobra um valor
+// fixo (cobre buscar com o fornecedor antes). Sempre recalculado aqui no
+// servidor a partir do endereço, nunca confia num valor vindo do cliente.
 type ShippingConfig = {
-  shippingLocalCity: string | null;
-  shippingLocalState: string | null;
-  shippingLocalCents: number;
-  shippingStateCents: number;
-  shippingNationalCents: number;
+  shippingOriginZipCode: string;
+  shippingPerKmCents: number;
+  shippingSupplierFixedCents: number;
 };
-const computeShippingCents = (
+
+const normalizeCityName = (city: string): string =>
+  city
+    .normalize("NFD")
+    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
+    .trim()
+    .toLowerCase();
+
+const isRibeiraoPretoCity = (city: string | null | undefined): boolean =>
+  normalizeCityName(city ?? "") === "ribeirao preto";
+
+const computeShippingCents = async (
   method: "retirada" | "envio",
-  city: string | null | undefined,
-  state: string | null | undefined,
+  zipCode: string | null | undefined,
+  hasEstoqueItems: boolean,
+  hasCatalogoItems: boolean,
   config: ShippingConfig | null
-): number => {
-  if (method === "retirada") return 0;
-  if (!config) return 0;
-  const normCity = (city ?? "").trim().toLowerCase();
-  const normState = (state ?? "").trim().toUpperCase();
-  const localCity = (config.shippingLocalCity ?? "").trim().toLowerCase();
-  const localState = (config.shippingLocalState ?? "").trim().toUpperCase();
-  if (normState && localState && normState === localState) {
-    if (normCity && localCity && normCity === localCity) return config.shippingLocalCents;
-    return config.shippingStateCents;
+): Promise<number> => {
+  if (method === "retirada" || !config) return 0;
+  let total = 0;
+  if (hasEstoqueItems) {
+    if (!zipCode) {
+      throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o CEP pra calcular o frete de entrega" });
+    }
+    const distanceCents = await computeStockDeliveryCents(zipCode, config.shippingOriginZipCode, config.shippingPerKmCents);
+    if (distanceCents === null) {
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Não conseguimos calcular o frete pro seu CEP agora. Confira o CEP ou tente de novo em instantes.",
+      });
+    }
+    total += distanceCents;
   }
-  return config.shippingNationalCents;
+  if (hasCatalogoItems) {
+    total += config.shippingSupplierFixedCents;
+  }
+  return total;
 };
 
 // Cupom de indicação por terreiro (Fase 2 do plano de expansão nacional) —
@@ -2160,9 +2175,23 @@ const portalRouter = router({
         }
 
         // Entrega usa o endereço já cadastrado do terreiro (Minha Conta) — se
-        // ele ainda não preencheu, frete fica 0 e Rafael combina manualmente.
+        // ele ainda não preencheu o CEP, frete fica 0 e Rafael combina manualmente
+        // (não bloqueia o pedido do parceiro, diferente da loja pública).
         const shippingConfig = await getSystemConfig();
-        const shippingCents = computeShippingCents("envio", ctx.terreiro.shippingCity, ctx.terreiro.shippingState, shippingConfig);
+        let shippingCents = 0;
+        if (ctx.terreiro.shippingZipCode) {
+          try {
+            shippingCents = await computeShippingCents(
+              "envio",
+              ctx.terreiro.shippingZipCode,
+              orderItems.some((i) => i.source === "estoque"),
+              orderItems.some((i) => i.source === "catalogo"),
+              shippingConfig
+            );
+          } catch {
+            shippingCents = 0;
+          }
+        }
         const order = await createPartnerOrder(ctx.terreiro.id, orderItems, shippingCents);
         notifyPartnerOrder(ctx.terreiro.name, order.subtotal + shippingCents);
         const tierUpdate = await recalculatePartnerTierByOrders(ctx.terreiro.id);
@@ -2203,13 +2232,33 @@ const publicStoreRouter = router({
     info: publicProcedure.query(async () => {
       const config = await getSystemConfig();
       return {
-        localCity: config?.shippingLocalCity ?? "Ribeirão Preto",
-        localState: config?.shippingLocalState ?? "SP",
-        localCents: config?.shippingLocalCents ?? 0,
-        stateCents: config?.shippingStateCents ?? 0,
-        nationalCents: config?.shippingNationalCents ?? 0,
+        perKmCents: config?.shippingPerKmCents ?? 150,
+        supplierFixedCents: config?.shippingSupplierFixedCents ?? 4000,
       };
     }),
+
+    // Prévia do frete real (com distância) antes de confirmar o pedido — o
+    // valor cobrado de verdade é sempre recalculado de novo na hora de criar
+    // o pedido/pagamento, isso aqui é só pra mostrar pro cliente com antecedência.
+    preview: publicProcedure
+      .input(
+        z.object({
+          zipCode: z.string().min(8).max(9),
+          hasEstoqueItems: z.boolean(),
+          hasCatalogoItems: z.boolean(),
+        })
+      )
+      .query(async ({ input }) => {
+        const config = await getSystemConfig();
+        const shippingCents = await computeShippingCents(
+          "envio",
+          input.zipCode,
+          input.hasEstoqueItems,
+          input.hasCatalogoItems,
+          config
+        );
+        return { shippingCents };
+      }),
   }),
 
   // Aba "Produtos": só o estoque da loja, preço cheio, pra qualquer visitante ver.
@@ -2256,6 +2305,12 @@ const publicStoreRouter = router({
         if (input.shippingMethod === "envio" && !input.shippingAddress) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o endereço de entrega" });
         }
+        if (input.shippingMethod === "envio" && !isRibeiraoPretoCity(input.shippingAddress?.city)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Por enquanto só entregamos em Ribeirão Preto. Pra outras cidades, escolha retirar na loja.",
+          });
+        }
 
         const stockItems = await listActiveProductsFullPrice();
         const stockById = new Map(stockItems.map((i) => [i.id, i]));
@@ -2289,7 +2344,13 @@ const publicStoreRouter = router({
         }
 
         const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
-        const shippingCents = computeShippingCents(input.shippingMethod, input.shippingAddress?.city, input.shippingAddress?.state, config);
+        const shippingCents = await computeShippingCents(
+          input.shippingMethod,
+          input.shippingAddress?.zipCode,
+          true,
+          false,
+          config
+        );
 
         const order = await createPublicOrder({
           customerName: input.customerName,
@@ -2413,6 +2474,12 @@ const publicStoreRouter = router({
         if (input.shippingMethod === "envio" && !input.shippingAddress) {
           throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o endereço de entrega" });
         }
+        if (input.shippingMethod === "envio" && !isRibeiraoPretoCity(input.shippingAddress?.city)) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Por enquanto só entregamos em Ribeirão Preto. Pra outras cidades, escolha retirar na loja.",
+          });
+        }
         const catalogItems = await listAvailableSupplierCatalogForOrders();
         const catalogById = new Map(catalogItems.map((i) => [i.id, i]));
         const stockItems = await listActiveProductsFullPrice();
@@ -2472,7 +2539,13 @@ const publicStoreRouter = router({
         }
 
         const config = await getSystemConfig();
-        const shippingCents = computeShippingCents(input.shippingMethod, input.shippingAddress?.city, input.shippingAddress?.state, config);
+        const shippingCents = await computeShippingCents(
+          input.shippingMethod,
+          input.shippingAddress?.zipCode,
+          orderItems.some((i) => i.source === "estoque"),
+          orderItems.some((i) => i.source === "catalogo"),
+          config
+        );
         const order = await createPublicOrder({
           customerName: input.customerName,
           customerPhone: input.customerPhone,

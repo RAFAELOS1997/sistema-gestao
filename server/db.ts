@@ -573,6 +573,21 @@ export async function runStartupMigrations() {
   } catch (error: any) {
     if (!isDupColumn(error)) console.error("[migrations] systemConfig.shippingNationalCents:", error);
   }
+  try {
+    await db.execute(sql`ALTER TABLE systemConfig ADD COLUMN shippingOriginZipCode varchar(9) NOT NULL DEFAULT '14090210'`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] systemConfig.shippingOriginZipCode:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE systemConfig ADD COLUMN shippingPerKmCents int NOT NULL DEFAULT 150`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] systemConfig.shippingPerKmCents:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE systemConfig ADD COLUMN shippingSupplierFixedCents int NOT NULL DEFAULT 4000`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] systemConfig.shippingSupplierFixedCents:", error);
+  }
 
   for (const col of ["shippingZipCode varchar(9)", "shippingStreet varchar(255)", "shippingNumber varchar(20)", "shippingComplement varchar(100)", "shippingNeighborhood varchar(100)", "shippingCity varchar(100)", "shippingState varchar(2)"]) {
     try {

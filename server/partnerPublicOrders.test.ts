@@ -93,11 +93,8 @@ describe("publicStore.shipping.info", () => {
   it("é acessível sem sessão e sempre retorna um shape válido", async () => {
     const caller = appRouter.createCaller(createPublicContext());
     const info = await caller.publicStore.shipping.info();
-    expect(info).toHaveProperty("localCity");
-    expect(info).toHaveProperty("localState");
-    expect(info).toHaveProperty("localCents");
-    expect(info).toHaveProperty("stateCents");
-    expect(info).toHaveProperty("nationalCents");
+    expect(info).toHaveProperty("perKmCents");
+    expect(info).toHaveProperty("supplierFixedCents");
   });
 });
 

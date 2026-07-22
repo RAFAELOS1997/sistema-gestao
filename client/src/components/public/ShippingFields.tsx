@@ -196,3 +196,14 @@ export function isAddressComplete(address: ShippingAddress): boolean {
     address.state.trim().length === 2
   );
 }
+
+// Por enquanto a entrega é só em Ribeirão Preto (entrega própria, não
+// Correios) — mesma checagem que o servidor faz antes de aceitar o pedido.
+export function isRibeiraoPreto(city: string): boolean {
+  const normalized = city
+    .normalize("NFD")
+    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
+    .trim()
+    .toLowerCase();
+  return normalized === "ribeirao preto";
+}

@@ -31,7 +31,7 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
               <MapPin className="w-3 h-3" /> Loja física em Ribeirão Preto, SP
             </span>
             <span className="inline-flex items-center gap-1.5">
-              <Truck className="w-3 h-3" /> Entrega pra todo o Brasil
+              <Truck className="w-3 h-3" /> Entrega própria em Ribeirão Preto
             </span>
           </div>
           <span className="inline-flex items-center gap-1.5">
@@ -153,7 +153,7 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
             Fale com a gente pelo WhatsApp
           </a>
           <p className="text-xs text-muted-foreground max-w-md">
-            Retire na loja em Ribeirão Preto ou receba em casa em qualquer lugar do Brasil, via Correios.
+            Por enquanto entregamos só em Ribeirão Preto (entrega própria). Retirada na loja disponível pra qualquer cidade.
           </p>
         </div>
       </footer>

@@ -131,6 +131,14 @@ export const systemConfig = mysqlTable("systemConfig", {
   shippingLocalCents: int("shippingLocalCents").default(0).notNull(),
   shippingStateCents: int("shippingStateCents").default(0).notNull(),
   shippingNationalCents: int("shippingNationalCents").default(0).notNull(),
+  // Entrega própria por enquanto (só Ribeirão Preto e região) — frete de
+  // item do ESTOQUE calculado pela distância real até o cliente a partir do
+  // CEP da loja; frete de item do FORNECEDOR é um valor fixo (cobre buscar
+  // com o fornecedor antes de entregar). Substitui as 3 faixas antigas acima
+  // (que ficam no banco sem uso, por segurança, mas não aparecem mais na tela).
+  shippingOriginZipCode: varchar("shippingOriginZipCode", { length: 9 }).default("14090210").notNull(),
+  shippingPerKmCents: int("shippingPerKmCents").default(150).notNull(),
+  shippingSupplierFixedCents: int("shippingSupplierFixedCents").default(4000).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

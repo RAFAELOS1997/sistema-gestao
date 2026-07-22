@@ -11,26 +11,8 @@ import { toast } from "sonner";
 import { useProntaEntregaCart } from "@/contexts/ProntaEntregaCartContext";
 import { QRCodeSVG } from "qrcode.react";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
-import { ShippingMethodPicker, ShippingAddressForm, EMPTY_ADDRESS, isAddressComplete, ShippingMethod, ShippingAddress } from "@/components/public/ShippingFields";
+import { ShippingMethodPicker, ShippingAddressForm, EMPTY_ADDRESS, isAddressComplete, isRibeiraoPreto, ShippingMethod, ShippingAddress } from "@/components/public/ShippingFields";
 import { CouponField } from "@/components/public/CouponField";
-
-// Espelha computeShippingCents do servidor — só pra mostrar uma prévia antes
-// de enviar; o valor cobrado de verdade é sempre recalculado lá.
-function previewShippingCents(
-  method: ShippingMethod,
-  city: string,
-  state: string,
-  info: { localCity: string; localState: string; localCents: number; stateCents: number; nationalCents: number } | undefined
-): number {
-  if (method === "retirada" || !info) return 0;
-  const normCity = city.trim().toLowerCase();
-  const normState = state.trim().toUpperCase();
-  if (normState && normState === info.localState.toUpperCase()) {
-    if (normCity && normCity === info.localCity.trim().toLowerCase()) return info.localCents;
-    return info.stateCents;
-  }
-  return info.nationalCents;
-}
 
 export default function PublicCatalogProducts() {
   const [search, setSearch] = useState("");
@@ -48,8 +30,12 @@ export default function PublicCatalogProducts() {
   const utils = trpc.useUtils();
   const productsQuery = trpc.publicStore.products.list.useQuery();
   const products = productsQuery.data ?? [];
-  const shippingInfoQuery = trpc.publicStore.shipping.info.useQuery();
-  const shippingCentsPreview = previewShippingCents(shippingMethod, address.city, address.state, shippingInfoQuery.data);
+  const zipDigits = address.zipCode.replace(/\D/g, "");
+  const shippingPreviewQuery = trpc.publicStore.shipping.preview.useQuery(
+    { zipCode: zipDigits, hasEstoqueItems: true, hasCatalogoItems: false },
+    { enabled: shippingMethod === "envio" && zipDigits.length === 8 }
+  );
+  const shippingCentsPreview = shippingMethod === "envio" ? shippingPreviewQuery.data?.shippingCents ?? null : 0;
 
   const checkoutMutation = trpc.publicStore.prontaEntrega.checkout.useMutation({
     onSuccess: (result) => setCharge({ orderNsu: result.orderNsu, checkoutUrl: result.checkoutUrl, total: result.subtotal + result.shippingCents }),
@@ -109,6 +95,10 @@ export default function PublicCatalogProducts() {
       toast.error("Preencha o endereço de entrega completo (CEP, número, bairro, cidade e UF)");
       return;
     }
+    if (shippingMethod === "envio" && !isRibeiraoPreto(address.city)) {
+      toast.error("Por enquanto só entregamos em Ribeirão Preto. Pra outras cidades, escolha retirar na loja.");
+      return;
+    }
     checkoutMutation.mutate({
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
@@ -138,7 +128,7 @@ export default function PublicCatalogProducts() {
       </div>
 
       <p className="text-xs text-accent bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
-        Entregamos pra todo o Brasil pelos Correios — ou você pode retirar direto na loja, em Ribeirão Preto.
+        Por enquanto entregamos só em Ribeirão Preto (entrega própria) — ou você pode retirar direto na loja.
       </p>
 
       <div className="flex flex-col gap-3">
@@ -311,9 +301,13 @@ export default function PublicCatalogProducts() {
               )}
 
               <div className="px-4 pb-4">
-                {shippingMethod === "envio" && shippingCentsPreview > 0 && (
+                {shippingMethod === "envio" && zipDigits.length === 8 && (
                   <p className="text-xs text-muted-foreground mb-2 text-center">
-                    Total com frete: R$ {((subtotal + shippingCentsPreview) / 100).toFixed(2)}
+                    {shippingPreviewQuery.isFetching
+                      ? "Calculando frete..."
+                      : shippingCentsPreview != null
+                        ? `Total com frete: R$ ${((subtotal + shippingCentsPreview) / 100).toFixed(2)}`
+                        : "Não conseguimos calcular o frete pra esse CEP"}
                   </p>
                 )}
                 <Button

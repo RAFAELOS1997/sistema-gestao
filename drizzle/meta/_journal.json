@@ -225,6 +225,13 @@
       "when": 1784725242238,
       "tag": "0031_misty_blackheart",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1784744737690,
+      "tag": "0032_old_bucky",
+      "breakpoints": true
     }
   ]
 }
