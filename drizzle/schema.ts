@@ -417,6 +417,9 @@ export const consignmentRequests = mysqlTable("consignmentRequests", {
   terreiroId: int("terreiroId").notNull(),
   status: mysqlEnum("status", ["pendente", "entregue", "cancelado"]).notNull().default("pendente"),
   notes: text("notes"),
+  // Registro do aceite do Contrato de Comodato (obrigatório pra solicitar) —
+  // guardado como prova, nunca fica nulo numa solicitação criada pelo sistema.
+  termsAcceptedAt: timestamp("termsAcceptedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

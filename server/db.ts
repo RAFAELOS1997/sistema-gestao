@@ -522,6 +522,7 @@ export async function runStartupMigrations() {
         terreiroId int NOT NULL,
         status enum('pendente','entregue','cancelado') NOT NULL DEFAULT 'pendente',
         notes text,
+        termsAcceptedAt timestamp NULL,
         createdAt timestamp NOT NULL DEFAULT (now()),
         updatedAt timestamp NOT NULL DEFAULT (now()) ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id)
@@ -529,6 +530,11 @@ export async function runStartupMigrations() {
     `);
   } catch (error: any) {
     console.error("[migrations] consignmentRequests:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE consignmentRequests ADD COLUMN termsAcceptedAt timestamp NULL`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] consignmentRequests.termsAcceptedAt:", error);
   }
 
   try {
@@ -1774,11 +1780,17 @@ export async function markConsignmentReturned(id: number, quantity: number) {
 export async function createConsignmentRequest(
   terreiroId: number,
   items: { productId: number; name: string; quantity: number }[],
-  notes?: string | null
+  notes?: string | null,
+  termsAcceptedAt?: Date
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const requestResult = await db.insert(consignmentRequests).values({ terreiroId, notes: notes ?? null, status: "pendente" });
+  const requestResult = await db.insert(consignmentRequests).values({
+    terreiroId,
+    notes: notes ?? null,
+    status: "pendente",
+    termsAcceptedAt: termsAcceptedAt ?? new Date(),
+  });
   const requestId = ((requestResult as any)[0]?.insertId ?? (requestResult as any).insertId) as number;
   await db.insert(consignmentRequestItems).values(
     items.map((item) => ({

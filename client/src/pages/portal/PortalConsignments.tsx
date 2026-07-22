@@ -9,7 +9,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { PackagePlus, Minus, Plus, Package } from "lucide-react";
+import { PackagePlus, Minus, Plus, Package, ArrowLeft } from "lucide-react";
+import { ComodatoContract } from "@/components/portal/ComodatoContract";
 
 const STATUS_LABELS: Record<string, string> = {
   pendente: "Aguardando entrega",
@@ -29,10 +30,13 @@ const STATUS_COLORS: Record<string, string> = {
 export default function PortalConsignments() {
   const [showSettled, setShowSettled] = useState(false);
   const [isRequestOpen, setIsRequestOpen] = useState(false);
+  const [dialogStep, setDialogStep] = useState<"pick" | "contract">("pick");
   const [cart, setCart] = useState<Record<number, number>>({});
   const [notes, setNotes] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const utils = trpc.useUtils();
+  const meQuery = trpc.portal.me.useQuery();
   const consignmentsQuery = trpc.portal.consignments.list.useQuery({ includeSettled: showSettled });
   const consignments = consignmentsQuery.data ?? [];
 
@@ -42,11 +46,17 @@ export default function PortalConsignments() {
   const requestsQuery = trpc.portal.consignmentRequests.list.useQuery();
   const requests = requestsQuery.data ?? [];
 
+  const resetRequestForm = () => {
+    setCart({});
+    setNotes("");
+    setTermsAccepted(false);
+    setDialogStep("pick");
+  };
+
   const createRequestMutation = trpc.portal.consignmentRequests.create.useMutation({
     onSuccess: () => {
       toast.success("Pedido enviado! A Toca da Pantera vai confirmar a entrega.");
-      setCart({});
-      setNotes("");
+      resetRequestForm();
       setIsRequestOpen(false);
       utils.portal.consignmentRequests.list.invalidate();
     },
@@ -72,14 +82,23 @@ export default function PortalConsignments() {
     });
   };
 
-  const handleSubmitRequest = () => {
+  const handleGoToContract = () => {
     if (cartItems.length === 0) {
       toast.error("Escolha ao menos um item");
+      return;
+    }
+    setDialogStep("contract");
+  };
+
+  const handleSubmitRequest = () => {
+    if (!termsAccepted) {
+      toast.error("É preciso aceitar os termos do contrato de comodato");
       return;
     }
     createRequestMutation.mutate({
       items: cartItems.map((i) => ({ productId: i.id, quantity: i.quantity })),
       notes: notes.trim() || undefined,
+      termsAccepted: true,
     });
   };
 
@@ -102,7 +121,13 @@ export default function PortalConsignments() {
           <Button variant="outline" size="sm" className="h-9" onClick={() => setShowSettled((v) => !v)}>
             {showSettled ? "Só pendentes" : "Ver histórico"}
           </Button>
-          <Dialog open={isRequestOpen} onOpenChange={setIsRequestOpen}>
+          <Dialog
+            open={isRequestOpen}
+            onOpenChange={(open) => {
+              setIsRequestOpen(open);
+              if (!open) resetRequestForm();
+            }}
+          >
             <DialogTrigger asChild>
               <Button size="sm" className="h-9 bg-accent text-accent-foreground hover:bg-accent/90">
                 <PackagePlus className="w-4 h-4 mr-2" />
@@ -110,74 +135,103 @@ export default function PortalConsignments() {
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Solicitar produtos em comodato</DialogTitle>
-                <DialogDescription>
-                  Escolha itens do estoque da loja — a Toca da Pantera confirma e entrega no seu terreiro.
-                  O estoque só é reservado quando a entrega é confirmada.
-                </DialogDescription>
-              </DialogHeader>
+              {dialogStep === "pick" ? (
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Solicitar produtos em comodato</DialogTitle>
+                    <DialogDescription>
+                      Escolha itens do estoque da loja — a Toca da Pantera confirma e entrega no seu terreiro.
+                      O estoque só é reservado quando a entrega é confirmada.
+                    </DialogDescription>
+                  </DialogHeader>
 
-              {stockQuery.isLoading ? (
-                <p className="text-sm text-muted-foreground text-center py-6">Carregando produtos...</p>
-              ) : stock.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-6">Nenhum produto disponível no momento.</p>
+                  {stockQuery.isLoading ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">Carregando produtos...</p>
+                  ) : stock.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">Nenhum produto disponível no momento.</p>
+                  ) : (
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                      {stock.map((product) => {
+                        const qty = cart[product.id] ?? 0;
+                        return (
+                          <div key={product.id} className="flex items-center justify-between gap-2 p-2 bg-background rounded border border-border">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-foreground truncate">{product.name}</p>
+                              <p className="text-[11px] text-muted-foreground">Estoque: {product.currentStock}</p>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => setQuantity(product.id, qty - 1)}
+                                disabled={qty === 0}
+                                className="p-1.5 rounded bg-background border border-border text-accent disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/10"
+                              >
+                                <Minus className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="w-6 text-center text-sm font-semibold text-foreground">{qty}</span>
+                              <button
+                                type="button"
+                                onClick={() => setQuantity(product.id, qty + 1)}
+                                disabled={qty >= product.currentStock}
+                                className="p-1.5 rounded bg-accent text-accent-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/90"
+                              >
+                                <Plus className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div>
+                    <Label htmlFor="requestNotes" className="text-xs">Observações (opcional)</Label>
+                    <Textarea
+                      id="requestNotes"
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Ex: precisa pra gira desse sábado"
+                      rows={2}
+                      className="mt-1"
+                    />
+                  </div>
+
+                  <Button
+                    className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                    disabled={cartItems.length === 0}
+                    onClick={handleGoToContract}
+                  >
+                    {`Continuar${cartItems.length > 0 ? ` (${cartItems.reduce((s, i) => s + i.quantity, 0)} item(ns))` : ""}`}
+                  </Button>
+                </>
               ) : (
-                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                  {stock.map((product) => {
-                    const qty = cart[product.id] ?? 0;
-                    return (
-                      <div key={product.id} className="flex items-center justify-between gap-2 p-2 bg-background rounded border border-border">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm text-foreground truncate">{product.name}</p>
-                          <p className="text-[11px] text-muted-foreground">Estoque: {product.currentStock}</p>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button
-                            type="button"
-                            onClick={() => setQuantity(product.id, qty - 1)}
-                            disabled={qty === 0}
-                            className="p-1.5 rounded bg-background border border-border text-accent disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/10"
-                          >
-                            <Minus className="w-3.5 h-3.5" />
-                          </button>
-                          <span className="w-6 text-center text-sm font-semibold text-foreground">{qty}</span>
-                          <button
-                            type="button"
-                            onClick={() => setQuantity(product.id, qty + 1)}
-                            disabled={qty >= product.currentStock}
-                            className="p-1.5 rounded bg-accent text-accent-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/90"
-                          >
-                            <Plus className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
+                <>
+                  <DialogHeader>
+                    <DialogTitle>Contrato de Comodato</DialogTitle>
+                    <DialogDescription>Leia e aceite os termos antes de enviar o pedido.</DialogDescription>
+                  </DialogHeader>
+
+                  <ComodatoContract
+                    terreiroName={meQuery.data?.name ?? "Terreiro"}
+                    items={cartItems.map((i) => ({ name: i.name, quantity: i.quantity }))}
+                    accepted={termsAccepted}
+                    onAcceptedChange={setTermsAccepted}
+                  />
+
+                  <div className="flex gap-2">
+                    <Button type="button" variant="outline" onClick={() => setDialogStep("pick")}>
+                      <ArrowLeft className="w-4 h-4 mr-2" /> Voltar
+                    </Button>
+                    <Button
+                      className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
+                      disabled={!termsAccepted || createRequestMutation.isPending}
+                      onClick={handleSubmitRequest}
+                    >
+                      {createRequestMutation.isPending ? "Enviando..." : "Aceitar e enviar pedido"}
+                    </Button>
+                  </div>
+                </>
               )}
-
-              <div>
-                <Label htmlFor="requestNotes" className="text-xs">Observações (opcional)</Label>
-                <Textarea
-                  id="requestNotes"
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ex: precisa pra gira desse sábado"
-                  rows={2}
-                  className="mt-1"
-                />
-              </div>
-
-              <Button
-                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-                disabled={cartItems.length === 0 || createRequestMutation.isPending}
-                onClick={handleSubmitRequest}
-              >
-                {createRequestMutation.isPending
-                  ? "Enviando..."
-                  : `Enviar pedido${cartItems.length > 0 ? ` (${cartItems.reduce((s, i) => s + i.quantity, 0)} item(ns))` : ""}`}
-              </Button>
             </DialogContent>
           </Dialog>
         </div>

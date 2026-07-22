@@ -2061,6 +2061,9 @@ const portalRouter = router({
         z.object({
           items: z.array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().positive() })).min(1),
           notes: z.string().max(500).optional(),
+          // Obrigatório aceitar o Contrato de Comodato antes de solicitar —
+          // nunca confia só no client, sempre exige literalmente `true` aqui.
+          termsAccepted: z.literal(true, { message: "É preciso aceitar os termos do contrato de comodato" }),
         })
       )
       .mutation(async ({ input, ctx }) => {
@@ -2074,7 +2077,7 @@ const portalRouter = router({
           }
           return { productId, name: item.name, quantity };
         });
-        const result = await createConsignmentRequest(ctx.terreiro.id, items, input.notes);
+        const result = await createConsignmentRequest(ctx.terreiro.id, items, input.notes, new Date());
         notifyConsignmentRequest(ctx.terreiro.name, items.length);
         return { success: true, requestId: result.id };
       }),

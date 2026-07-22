@@ -1,0 +1,1 @@
+ALTER TABLE `consignmentRequests` ADD `termsAcceptedAt` timestamp;
