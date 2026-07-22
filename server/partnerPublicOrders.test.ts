@@ -82,6 +82,25 @@ describe("publicStore.orderCatalog.catalog", () => {
   });
 });
 
+describe("publicStore.coupons.validate", () => {
+  it("é acessível sem sessão e retorna inválido pra código inexistente (sem banco)", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    await expect(caller.publicStore.coupons.validate({ code: "NAOEXISTE" })).resolves.toEqual({ valid: false });
+  });
+});
+
+describe("publicStore.shipping.info", () => {
+  it("é acessível sem sessão e sempre retorna um shape válido", async () => {
+    const caller = appRouter.createCaller(createPublicContext());
+    const info = await caller.publicStore.shipping.info();
+    expect(info).toHaveProperty("localCity");
+    expect(info).toHaveProperty("localState");
+    expect(info).toHaveProperty("localCents");
+    expect(info).toHaveProperty("stateCents");
+    expect(info).toHaveProperty("nationalCents");
+  });
+});
+
 describe("publicStore.prontaEntrega.checkout", () => {
   it("recusa com mensagem clara quando a loja não configurou InfiniteTag", async () => {
     const caller = appRouter.createCaller(createPublicContext());

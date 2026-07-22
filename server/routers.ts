@@ -113,6 +113,7 @@ import {
   updatePublicOrderStatus,
   updatePublicOrderTracking,
   updatePartnerOrderTracking,
+  getTerreiroByReferralCode,
   fulfillPublicOrderForCharge,
   recalculatePartnerTierByOrders,
   ensureMinimumBronzeForConsignment,
@@ -1298,6 +1299,31 @@ const computeShippingCents = (
   return config.shippingNationalCents;
 };
 
+// Cupom de indicação por terreiro (Fase 2 do plano de expansão nacional) —
+// código público, validado sempre no servidor. Desconto é distribuído
+// proporcionalmente pelos itens do pedido ANTES de gravar (mesmo padrão já
+// usado pros descontos de carrinho em Vendas) pra sales/profit ficarem
+// certos quando o pedido for confirmado — nunca é um valor à parte.
+const COUPON_DISCOUNT_PERCENT = 5;
+
+function applyCouponDiscount<T extends { totalPrice: number; quantity: number; unitPrice: number }>(
+  items: T[]
+): { items: T[]; discountCents: number } {
+  const subtotal = items.reduce((sum, i) => sum + i.totalPrice, 0);
+  const discountCents = Math.round((subtotal * COUPON_DISCOUNT_PERCENT) / 100);
+  if (discountCents <= 0) return { items, discountCents: 0 };
+  let remaining = discountCents;
+  const discounted = items.map((item, idx) => {
+    const isLast = idx === items.length - 1;
+    const itemDiscount = isLast ? remaining : Math.min(remaining, Math.round((item.totalPrice * COUPON_DISCOUNT_PERCENT) / 100));
+    remaining -= itemDiscount;
+    const newTotalPrice = Math.max(0, item.totalPrice - itemDiscount);
+    const newUnitPrice = item.quantity > 0 ? Math.round(newTotalPrice / item.quantity) : item.unitPrice;
+    return { ...item, totalPrice: newTotalPrice, unitPrice: newUnitPrice };
+  });
+  return { items: discounted, discountCents };
+}
+
 const shippingAddressSchema = z.object({
   zipCode: z.string().min(8).max(9),
   street: z.string().min(1).max(255),
@@ -1851,6 +1877,7 @@ const portalRouter = router({
       shippingNeighborhood: ctx.terreiro.shippingNeighborhood,
       shippingCity: ctx.terreiro.shippingCity,
       shippingState: ctx.terreiro.shippingState,
+      referralCode: ctx.terreiro.referralCode,
     };
   }),
 
@@ -2158,6 +2185,18 @@ const publicStoreRouter = router({
   // Frete (Fase 1 do plano de expansão nacional): info pública pro cliente
   // ver "grátis em Ribeirão Preto" etc. antes de fechar — o valor cobrado de
   // verdade é sempre recalculado no servidor na hora de criar o pedido.
+  // Cupom de indicação (Fase 2): valida um código de terreiro sem revelar
+  // nada sensível — só se é válido e o nome, pro cliente confirmar.
+  coupons: router({
+    validate: publicProcedure
+      .input(z.object({ code: z.string().min(1).max(30) }))
+      .query(async ({ input }) => {
+        const terreiro = await getTerreiroByReferralCode(input.code);
+        if (!terreiro || !terreiro.isActive) return { valid: false as const };
+        return { valid: true as const, terreiroName: terreiro.name, discountPercent: COUPON_DISCOUNT_PERCENT };
+      }),
+  }),
+
   shipping: router({
     info: publicProcedure.query(async () => {
       const config = await getSystemConfig();
@@ -2200,6 +2239,7 @@ const publicStoreRouter = router({
           items: z.array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().positive() })).min(1),
           shippingMethod: z.enum(["retirada", "envio"]).default("retirada"),
           shippingAddress: shippingAddressSchema.optional(),
+          couponCode: z.string().max(30).optional(),
         })
       )
       .mutation(async ({ input }) => {
@@ -2217,7 +2257,7 @@ const publicStoreRouter = router({
 
         const stockItems = await listActiveProductsFullPrice();
         const stockById = new Map(stockItems.map((i) => [i.id, i]));
-        const orderItems = input.items.map(({ productId, quantity }) => {
+        let orderItems = input.items.map(({ productId, quantity }) => {
           const stockItem = stockById.get(productId);
           if (!stockItem) throw new TRPCError({ code: "BAD_REQUEST", message: "Produto não encontrado ou sem estoque" });
           if (quantity > stockItem.currentStock) {
@@ -2233,6 +2273,19 @@ const publicStoreRouter = router({
             totalPrice: unitPrice * quantity,
           };
         });
+
+        let referredByTerreiroId: number | null = null;
+        let discountCents = 0;
+        if (input.couponCode) {
+          const terreiro = await getTerreiroByReferralCode(input.couponCode);
+          if (terreiro && terreiro.isActive) {
+            referredByTerreiroId = terreiro.id;
+            const result = applyCouponDiscount(orderItems);
+            orderItems = result.items;
+            discountCents = result.discountCents;
+          }
+        }
+
         const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
         const shippingCents = computeShippingCents(input.shippingMethod, input.shippingAddress?.city, input.shippingAddress?.state, config);
 
@@ -2244,6 +2297,9 @@ const publicStoreRouter = router({
           shippingMethod: input.shippingMethod,
           shippingCents,
           shippingAddress: input.shippingAddress ?? null,
+          couponCode: referredByTerreiroId ? input.couponCode : null,
+          referredByTerreiroId,
+          discountCents,
         });
 
         // Se a InfinitePay falhar aqui, o pedido já foi gravado — cancela
@@ -2266,7 +2322,7 @@ const publicStoreRouter = router({
             checkoutUrl: url,
             publicOrderId: order.id,
           });
-          return { orderNsu, checkoutUrl: url, orderId: order.id, subtotal, shippingCents };
+          return { orderNsu, checkoutUrl: url, orderId: order.id, subtotal, shippingCents, discountCents };
         } catch (error) {
           await updatePublicOrderStatus(order.id, "cancelado");
           throw error;
@@ -2348,6 +2404,7 @@ const publicStoreRouter = router({
             .min(1),
           shippingMethod: z.enum(["retirada", "envio"]).default("retirada"),
           shippingAddress: shippingAddressSchema.optional(),
+          couponCode: z.string().max(30).optional(),
         })
       )
       .mutation(async ({ input }) => {
@@ -2359,7 +2416,7 @@ const publicStoreRouter = router({
         const stockItems = await listActiveProductsFullPrice();
         const stockById = new Map(stockItems.map((i) => [i.id, i]));
 
-        const orderItems = input.items.map(({ source, id, quantity }) => {
+        let orderItems = input.items.map(({ source, id, quantity }) => {
           if (source === "catalogo") {
             const catalogItem = catalogById.get(id);
             if (!catalogItem) throw new TRPCError({ code: "BAD_REQUEST", message: "Item não encontrado ou indisponível" });
@@ -2400,6 +2457,18 @@ const publicStoreRouter = router({
           });
         }
 
+        let referredByTerreiroId: number | null = null;
+        let discountCents = 0;
+        if (input.couponCode) {
+          const terreiro = await getTerreiroByReferralCode(input.couponCode);
+          if (terreiro && terreiro.isActive) {
+            referredByTerreiroId = terreiro.id;
+            const result = applyCouponDiscount(orderItems);
+            orderItems = result.items;
+            discountCents = result.discountCents;
+          }
+        }
+
         const config = await getSystemConfig();
         const shippingCents = computeShippingCents(input.shippingMethod, input.shippingAddress?.city, input.shippingAddress?.state, config);
         const order = await createPublicOrder({
@@ -2409,9 +2478,13 @@ const publicStoreRouter = router({
           shippingMethod: input.shippingMethod,
           shippingCents,
           shippingAddress: input.shippingAddress ?? null,
+          couponCode: referredByTerreiroId ? input.couponCode : null,
+          referredByTerreiroId,
+          discountCents,
         });
-        notifyPublicOrder(input.customerName, subtotal + shippingCents);
-        return { success: true, orderId: order.id, subtotal, shippingCents };
+        const finalSubtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+        notifyPublicOrder(input.customerName, finalSubtotal + shippingCents);
+        return { success: true, orderId: order.id, subtotal: finalSubtotal, shippingCents, discountCents };
       }),
   }),
 });

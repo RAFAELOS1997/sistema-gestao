@@ -211,6 +211,13 @@
       "when": 1784685584904,
       "tag": "0029_light_ken_ellis",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1784686420674,
+      "tag": "0030_conscious_scarlet_spider",
+      "breakpoints": true
     }
   ]
 }

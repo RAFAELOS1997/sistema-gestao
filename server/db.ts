@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql, desc, or, isNotNull } from "drizzle-orm";
+import { and, eq, gte, lte, sql, desc, or, isNotNull, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, InsertProduct, InsertSale, InsertPurchase, InsertSupplier, InsertProductSupplier,
@@ -634,6 +634,35 @@ export async function runStartupMigrations() {
     }
   }
 
+  // Cupom de indicação por terreiro (Fase 2 do plano de expansão nacional).
+  try {
+    await db.execute(sql`ALTER TABLE terreiros ADD COLUMN referralCode varchar(30)`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] terreiros.referralCode:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE publicOrders ADD COLUMN couponCode varchar(30)`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] publicOrders.couponCode:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE publicOrders ADD COLUMN referredByTerreiroId int`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] publicOrders.referredByTerreiroId:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE publicOrders ADD COLUMN discountCents int NOT NULL DEFAULT 0`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] publicOrders.discountCents:", error);
+  }
+  // Preenche o código de indicação de terreiros que já existiam antes dessa
+  // coluna existir — idempotente, só mexe em quem ainda está null.
+  try {
+    await backfillMissingReferralCodes();
+  } catch (error: any) {
+    console.error("[migrations] backfillMissingReferralCodes:", error);
+  }
+
   console.log("[migrations] Verificação de schema concluída.");
 }
 
@@ -1163,12 +1192,52 @@ export async function getTerreiroByUsername(username: string) {
   return result[0] ?? null;
 }
 
+export async function getTerreiroByReferralCode(code: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const normalized = code.trim().toUpperCase();
+  const result = await db.select().from(terreiros).where(eq(terreiros.referralCode, normalized)).limit(1);
+  return result[0] ?? null;
+}
+
+// Gera um código curto e único a partir do nome do terreiro (ex.: "Terreiro
+// de Oxalá" -> "TERREIRODEOXA", ou "...OXA2" se já existir). Só letras/
+// números, sem acento, pra ser fácil de digitar/falar por telefone.
+export async function generateUniqueReferralCode(name: string): Promise<string> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const base = name
+    .normalize("NFD")
+    .replace(new RegExp("[\\u0300-\\u036f]", "g"), "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 12) || "TERREIRO";
+  let candidate = base;
+  let suffix = 1;
+  while (await getTerreiroByReferralCode(candidate)) {
+    suffix += 1;
+    candidate = `${base.slice(0, 11)}${suffix}`;
+  }
+  return candidate;
+}
+
+export async function backfillMissingReferralCodes() {
+  const db = await getDb();
+  if (!db) return;
+  const withoutCode = await db.select().from(terreiros).where(isNull(terreiros.referralCode));
+  for (const t of withoutCode) {
+    const code = await generateUniqueReferralCode(t.name);
+    await db.update(terreiros).set({ referralCode: code }).where(eq(terreiros.id, t.id));
+  }
+}
+
 export async function createTerreiro(data: Omit<InsertTerreiro, "id" | "createdAt" | "updatedAt" | "lastSignedIn">) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const existing = await getTerreiroByUsername(data.username);
   if (existing) throw new Error("Já existe um login com esse nome de usuário");
-  return db.insert(terreiros).values(data);
+  const referralCode = await generateUniqueReferralCode(data.name);
+  return db.insert(terreiros).values({ ...data, referralCode });
 }
 
 export async function updateTerreiro(
@@ -1986,6 +2055,9 @@ export async function createPublicOrder(data: {
     city: string;
     state: string;
   } | null;
+  couponCode?: string | null;
+  referredByTerreiroId?: number | null;
+  discountCents?: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2006,6 +2078,9 @@ export async function createPublicOrder(data: {
     shippingCity: addr?.city ?? null,
     shippingState: addr?.state ?? null,
     shippingCents: data.shippingCents,
+    couponCode: data.couponCode ?? null,
+    referredByTerreiroId: data.referredByTerreiroId ?? null,
+    discountCents: data.discountCents ?? 0,
   });
   const orderId = ((orderResult as any)[0]?.insertId ?? (orderResult as any).insertId) as number;
   await db.insert(publicOrderItems).values(
@@ -2038,7 +2113,36 @@ export async function updatePartnerOrderTracking(id: number, trackingCode: strin
 export async function listAllPublicOrders() {
   const db = await getDb();
   if (!db) return [];
-  const orders = await db.select().from(publicOrders).orderBy(desc(publicOrders.createdAt));
+  const orders = await db
+    .select({
+      id: publicOrders.id,
+      customerName: publicOrders.customerName,
+      customerPhone: publicOrders.customerPhone,
+      subtotal: publicOrders.subtotal,
+      status: publicOrders.status,
+      paymentMethod: publicOrders.paymentMethod,
+      notes: publicOrders.notes,
+      shippingMethod: publicOrders.shippingMethod,
+      shippingZipCode: publicOrders.shippingZipCode,
+      shippingStreet: publicOrders.shippingStreet,
+      shippingNumber: publicOrders.shippingNumber,
+      shippingComplement: publicOrders.shippingComplement,
+      shippingNeighborhood: publicOrders.shippingNeighborhood,
+      shippingCity: publicOrders.shippingCity,
+      shippingState: publicOrders.shippingState,
+      shippingCents: publicOrders.shippingCents,
+      trackingCode: publicOrders.trackingCode,
+      carrier: publicOrders.carrier,
+      couponCode: publicOrders.couponCode,
+      referredByTerreiroId: publicOrders.referredByTerreiroId,
+      referredByTerreiroName: terreiros.name,
+      discountCents: publicOrders.discountCents,
+      createdAt: publicOrders.createdAt,
+      updatedAt: publicOrders.updatedAt,
+    })
+    .from(publicOrders)
+    .leftJoin(terreiros, eq(terreiros.id, publicOrders.referredByTerreiroId))
+    .orderBy(desc(publicOrders.createdAt));
   const items = await db.select().from(publicOrderItems);
   return orders.map((order) => ({
     ...order,

@@ -13,6 +13,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
 import { EntityShortcuts, EntityShortcut } from "@/components/EntityShortcuts";
 import { ShippingMethodPicker, ShippingAddressForm, EMPTY_ADDRESS, isAddressComplete, ShippingMethod, ShippingAddress } from "@/components/public/ShippingFields";
+import { CouponField } from "@/components/public/CouponField";
 
 // Espelha computeShippingCents do servidor — só pra mostrar uma prévia antes
 // de enviar; o valor cobrado de verdade é sempre recalculado lá.
@@ -42,6 +43,7 @@ export default function PublicCatalogProducts() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("retirada");
   const [address, setAddress] = useState<ShippingAddress>(EMPTY_ADDRESS);
+  const [couponCode, setCouponCode] = useState("");
   const [charge, setCharge] = useState<{ orderNsu: string; checkoutUrl: string; total: number } | null>(null);
   const [paid, setPaid] = useState(false);
 
@@ -115,6 +117,7 @@ export default function PublicCatalogProducts() {
       items: cartItems.map((i) => ({ productId: i.id, quantity: i.quantity })),
       shippingMethod,
       shippingAddress: shippingMethod === "envio" ? address : undefined,
+      couponCode: couponCode.trim() || undefined,
     });
   };
 
@@ -319,6 +322,10 @@ export default function PublicCatalogProducts() {
                     {shippingMethod === "envio" && (
                       <ShippingAddressForm address={address} onChange={setAddress} idPrefix="pe" />
                     )}
+                  </div>
+
+                  <div className="pt-2 border-t border-border">
+                    <CouponField code={couponCode} onChange={setCouponCode} idPrefix="pe" />
                   </div>
                 </CardContent>
               )}

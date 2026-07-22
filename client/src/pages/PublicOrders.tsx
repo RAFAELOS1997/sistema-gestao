@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { Store, Truck, PackageCheck } from "lucide-react";
+import { Store, Truck, PackageCheck, Gift } from "lucide-react";
 import { toast } from "sonner";
 
 function formatAddress(order: any): string | null {
@@ -142,6 +142,11 @@ export default function PublicOrders() {
                       {new Date(order.createdAt).toLocaleDateString("pt-BR")}
                     </p>
                   </div>
+                  {order.referredByTerreiroName && (
+                    <Badge className="text-[10px] bg-purple-900/40 text-purple-300 border-purple-700 w-fit">
+                      <Gift className="w-3 h-3 mr-1" /> Indicado por {order.referredByTerreiroName} (-R$ {(order.discountCents / 100).toFixed(2)})
+                    </Badge>
+                  )}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     {order.shippingMethod === "envio" ? <Truck className="w-3.5 h-3.5 shrink-0" /> : <Store className="w-3.5 h-3.5 shrink-0" />}
                     {order.shippingMethod === "envio" ? formatAddress(order) ?? "Enviar (endereço não informado)" : "Retirada na loja"}
@@ -210,6 +215,11 @@ export default function PublicOrders() {
                     <TableCell className="font-semibold text-accent">
                       R$ {((order.subtotal + (order.shippingCents ?? 0)) / 100).toFixed(2)}
                       {order.shippingCents > 0 && <div className="text-[10px] font-normal text-muted-foreground">frete R$ {(order.shippingCents / 100).toFixed(2)}</div>}
+                      {order.referredByTerreiroName && (
+                        <div className="text-[10px] font-normal text-purple-400 flex items-center gap-0.5">
+                          <Gift className="w-2.5 h-2.5" /> {order.referredByTerreiroName}
+                        </div>
+                      )}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {new Date(order.createdAt).toLocaleDateString("pt-BR")}

@@ -11,6 +11,7 @@ import { usePublicCart } from "@/contexts/PublicCartContext";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
 import { EntityShortcuts, EntityShortcut } from "@/components/EntityShortcuts";
 import { ShippingMethodPicker, ShippingAddressForm, EMPTY_ADDRESS, isAddressComplete, ShippingMethod, ShippingAddress } from "@/components/public/ShippingFields";
+import { CouponField } from "@/components/public/CouponField";
 
 type Source = "catalogo" | "estoque";
 
@@ -45,7 +46,8 @@ export default function PublicGenerateOrder() {
   const [customerPhone, setCustomerPhone] = useState("");
   const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("retirada");
   const [address, setAddress] = useState<ShippingAddress>(EMPTY_ADDRESS);
-  const [confirmedOrder, setConfirmedOrder] = useState<{ id: number; subtotal: number; shippingCents: number } | null>(null);
+  const [couponCode, setCouponCode] = useState("");
+  const [confirmedOrder, setConfirmedOrder] = useState<{ id: number; subtotal: number; shippingCents: number; discountCents: number } | null>(null);
 
   const catalogQuery = trpc.publicStore.orderCatalog.catalog.useQuery();
   const stockQuery = trpc.publicStore.orderCatalog.stock.useQuery();
@@ -65,7 +67,7 @@ export default function PublicGenerateOrder() {
 
   const createOrderMutation = trpc.publicStore.orders.create.useMutation({
     onSuccess: (result) => {
-      setConfirmedOrder({ id: result.orderId, subtotal: result.subtotal, shippingCents: result.shippingCents });
+      setConfirmedOrder({ id: result.orderId, subtotal: result.subtotal, shippingCents: result.shippingCents, discountCents: result.discountCents });
       clearCart();
       setCartExpanded(false);
     },
@@ -121,6 +123,7 @@ export default function PublicGenerateOrder() {
       items: cartItems.map((i) => ({ source: i.source, id: i.id, quantity: i.quantity })),
       shippingMethod,
       shippingAddress: shippingMethod === "envio" ? address : undefined,
+      couponCode: couponCode.trim() || undefined,
     });
   };
 
@@ -135,6 +138,9 @@ export default function PublicGenerateOrder() {
             Pedido #{confirmedOrder.id} — R$ {(total / 100).toFixed(2)}
             {confirmedOrder.shippingCents > 0 && (
               <span className="block text-xs mt-0.5">(inclui R$ {(confirmedOrder.shippingCents / 100).toFixed(2)} de frete)</span>
+            )}
+            {confirmedOrder.discountCents > 0 && (
+              <span className="block text-xs mt-0.5 text-green-500">(cupom aplicado: -R$ {(confirmedOrder.discountCents / 100).toFixed(2)})</span>
             )}
           </p>
         </div>
@@ -356,6 +362,10 @@ export default function PublicGenerateOrder() {
                     {shippingMethod === "envio" && (
                       <ShippingAddressForm address={address} onChange={setAddress} idPrefix="fp" />
                     )}
+                  </div>
+
+                  <div className="pt-2 border-t border-border">
+                    <CouponField code={couponCode} onChange={setCouponCode} idPrefix="fp" />
                   </div>
                 </CardContent>
               )}

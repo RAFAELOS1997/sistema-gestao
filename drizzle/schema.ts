@@ -303,6 +303,10 @@ export const terreiros = mysqlTable("terreiros", {
   shippingNeighborhood: varchar("shippingNeighborhood", { length: 100 }),
   shippingCity: varchar("shippingCity", { length: 100 }),
   shippingState: varchar("shippingState", { length: 2 }),
+  // Código de indicação (Fase 2 do plano de expansão nacional) — o terreiro
+  // divulga esse código pros próprios frequentadores; usado como cupom de
+  // desconto na loja pública, e permite ver qual terreiro trouxe a venda.
+  referralCode: varchar("referralCode", { length: 30 }).unique(),
   isActive: int("isActive").default(1).notNull(),
   mustChangePassword: int("mustChangePassword").default(0).notNull(), // força trocar a senha pré-cadastrada no próximo login
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -493,6 +497,12 @@ export const publicOrders = mysqlTable("publicOrders", {
   shippingCents: int("shippingCents").default(0).notNull(), // sempre recalculado no servidor, nunca confia no cliente
   trackingCode: varchar("trackingCode", { length: 100 }),
   carrier: varchar("carrier", { length: 100 }),
+  // Cupom de indicação (Fase 2) — código do terreiro usado nesse pedido, se
+  // algum. discountCents já vem descontado dos itens (subtotal reflete o
+  // valor com desconto) — guardado separado só pra mostrar no admin.
+  couponCode: varchar("couponCode", { length: 30 }),
+  referredByTerreiroId: int("referredByTerreiroId"),
+  discountCents: int("discountCents").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Loader2, Upload, X, UserPlus, Users, KeyRound, MapPin } from "lucide-react";
+import { Loader2, Upload, X, UserPlus, Users, KeyRound, MapPin, Copy, Gift } from "lucide-react";
 import { ShippingAddressForm, EMPTY_ADDRESS, ShippingAddress } from "@/components/public/ShippingFields";
 
 // Mesmo padrão usado no cadastro de produtos: redimensiona no navegador
@@ -254,6 +254,41 @@ export default function PortalAccount() {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Gift className="w-5 h-5 text-accent" />
+            Seu Código de Indicação
+          </CardTitle>
+          <CardDescription>
+            Divulgue esse código pros frequentadores do seu terreiro — quem usar ganha 5% de desconto na loja online,
+            e você aparece pra Toca da Pantera como quem trouxe aquela venda.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {me?.referralCode ? (
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-background border border-border rounded-lg px-4 py-3 text-center">
+                <span className="text-xl font-bold tracking-wider text-accent">{me.referralCode}</span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                onClick={() => {
+                  navigator.clipboard.writeText(me.referralCode ?? "");
+                  toast.success("Código copiado!");
+                }}
+              >
+                <Copy className="w-4 h-4" />
+              </Button>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">Seu código ainda está sendo gerado — atualize a página em instantes.</p>
+          )}
         </CardContent>
       </Card>
 
