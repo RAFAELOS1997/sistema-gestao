@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ZoomableImage } from "@/components/ZoomableImage";
 import { trpc } from "@/lib/trpc";
-import { Search, Plus, Minus, ShoppingCart, ChevronDown, ChevronUp, QrCode, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
+import { Search, Plus, Minus, ShoppingCart, QrCode, ExternalLink, Loader2, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { useProntaEntregaCart } from "@/contexts/ProntaEntregaCartContext";
 import { QRCodeSVG } from "qrcode.react";
@@ -222,106 +222,108 @@ export default function PublicCatalogProducts() {
         </div>
       )}
 
-      {/* Carrinho + checkout fixado embaixo */}
-      {cartItems.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 px-3 sm:px-6 pb-3 sm:pb-6 pt-3 bg-gradient-to-t from-background via-background to-transparent">
-          <div className="max-w-6xl mx-auto">
-            <Card className="border border-accent/30 bg-card shadow-xl">
-              <button
-                type="button"
-                onClick={() => setCartExpanded((v) => !v)}
-                className="w-full flex items-center justify-between px-4 py-3"
-              >
-                <div className="flex items-center gap-2">
-                  <ShoppingCart className="w-5 h-5 text-accent" />
-                  <span className="text-sm text-foreground font-medium">{itemCount} item(ns)</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-lg font-bold text-accent">R$ {(subtotal / 100).toFixed(2)}</span>
-                  {cartExpanded ? <ChevronDown className="w-5 h-5 text-muted-foreground" /> : <ChevronUp className="w-5 h-5 text-muted-foreground" />}
-                </div>
-              </button>
-
-              {cartExpanded && (
-                <CardContent className="space-y-3 pt-0 border-t border-border max-h-[50vh] overflow-y-auto">
-                  <div className="space-y-2 pt-3">
-                    {cartItems.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-2 p-2 bg-background rounded border border-border">
-                        <p className="text-sm text-foreground flex-1 truncate">{item.name}</p>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <button onClick={() => setQuantity(item.id, item.quantity - 1)} className="p-1 hover:bg-accent/20 rounded">
-                            <Minus className="w-3 h-3 text-accent" />
-                          </button>
-                          <span className="w-6 text-center text-sm text-foreground font-semibold">{item.quantity}</span>
-                          <button onClick={() => setQuantity(item.id, item.quantity + 1)} className="p-1 hover:bg-accent/20 rounded">
-                            <Plus className="w-3 h-3 text-accent" />
-                          </button>
-                        </div>
-                        <span className="text-sm font-semibold text-foreground w-20 text-right shrink-0">
-                          R$ {(item.total / 100).toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <div>
-                      <Label htmlFor="pe-customerName" className="text-xs">Seu nome</Label>
-                      <Input
-                        id="pe-customerName"
-                        value={customerName}
-                        onChange={(e) => setCustomerName(e.target.value)}
-                        className="h-9 mt-1"
-                        placeholder="Nome completo"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="pe-customerPhone" className="text-xs">Telefone (WhatsApp)</Label>
-                      <Input
-                        id="pe-customerPhone"
-                        value={customerPhone}
-                        onChange={(e) => setCustomerPhone(e.target.value)}
-                        className="h-9 mt-1"
-                        placeholder="(00) 00000-0000"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-border space-y-2">
-                    <Label className="text-xs">Como você quer receber?</Label>
-                    <ShippingMethodPicker method={shippingMethod} onChange={setShippingMethod} idPrefix="pe" />
-                    {shippingMethod === "envio" && (
-                      <ShippingAddressForm address={address} onChange={setAddress} idPrefix="pe" />
-                    )}
-                  </div>
-
-                  <div className="pt-2 border-t border-border">
-                    <CouponField code={couponCode} onChange={setCouponCode} idPrefix="pe" />
-                  </div>
-                </CardContent>
-              )}
-
-              <div className="px-4 pb-4">
-                {shippingMethod === "envio" && zipDigits.length === 8 && (
-                  <p className="text-xs text-muted-foreground mb-2 text-center">
-                    {shippingPreviewQuery.isFetching
-                      ? "Calculando frete..."
-                      : shippingCentsPreview != null
-                        ? `Total com frete: R$ ${((subtotal + shippingCentsPreview) / 100).toFixed(2)}`
-                        : "Não conseguimos calcular o frete pra esse CEP"}
-                  </p>
-                )}
-                <Button
-                  className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
-                  disabled={checkoutMutation.isPending}
-                  onClick={() => { setCartExpanded(true); handleCheckout(); }}
-                >
-                  {checkoutMutation.isPending ? "Gerando cobrança..." : "Finalizar com InfinitePay"}
-                </Button>
-              </div>
-            </Card>
-          </div>
-        </div>
+      {/* Botão flutuante do carrinho — só aparece com item(ns) adicionado(s) */}
+      {cartItems.length > 0 && !cartExpanded && (
+        <button
+          type="button"
+          onClick={() => setCartExpanded(true)}
+          className="fixed bottom-5 right-5 z-30 flex items-center gap-2 bg-accent text-accent-foreground rounded-full shadow-xl pl-4 pr-5 py-3 hover:brightness-110 active:scale-95 transition"
+        >
+          <span className="relative">
+            <ShoppingCart className="w-5 h-5" />
+            <span className="absolute -top-2 -right-2 bg-background text-accent text-[10px] font-bold rounded-full min-w-[16px] h-4 px-1 flex items-center justify-center border border-accent">
+              {itemCount}
+            </span>
+          </span>
+          <span className="text-sm font-bold">R$ {(subtotal / 100).toFixed(2)}</span>
+        </button>
       )}
+
+      {/* Carrinho completo — abre ao clicar no botão flutuante */}
+      <Sheet open={cartExpanded} onOpenChange={setCartExpanded}>
+        <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto rounded-t-2xl px-0">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <ShoppingCart className="w-5 h-5 text-accent" />
+              Seu carrinho — {itemCount} item(ns)
+            </SheetTitle>
+          </SheetHeader>
+          <div className="px-4 pb-4 space-y-3">
+            <div className="space-y-2">
+              {cartItems.map((item) => (
+                <div key={item.id} className="flex items-center justify-between gap-2 p-2 bg-muted rounded border border-border">
+                  <p className="text-sm text-foreground flex-1 truncate">{item.name}</p>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => setQuantity(item.id, item.quantity - 1)} className="p-1 hover:bg-accent/20 rounded">
+                      <Minus className="w-3 h-3 text-accent" />
+                    </button>
+                    <span className="w-6 text-center text-sm text-foreground font-semibold">{item.quantity}</span>
+                    <button onClick={() => setQuantity(item.id, item.quantity + 1)} className="p-1 hover:bg-accent/20 rounded">
+                      <Plus className="w-3 h-3 text-accent" />
+                    </button>
+                  </div>
+                  <span className="text-sm font-semibold text-foreground w-20 text-right shrink-0">
+                    R$ {(item.total / 100).toFixed(2)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <div>
+                <Label htmlFor="pe-customerName" className="text-xs">Seu nome</Label>
+                <Input
+                  id="pe-customerName"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="h-9 mt-1"
+                  placeholder="Nome completo"
+                />
+              </div>
+              <div>
+                <Label htmlFor="pe-customerPhone" className="text-xs">Telefone (WhatsApp)</Label>
+                <Input
+                  id="pe-customerPhone"
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  className="h-9 mt-1"
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-border space-y-2">
+              <Label className="text-xs">Como você quer receber?</Label>
+              <ShippingMethodPicker method={shippingMethod} onChange={setShippingMethod} idPrefix="pe" />
+              {shippingMethod === "envio" && (
+                <ShippingAddressForm address={address} onChange={setAddress} idPrefix="pe" />
+              )}
+            </div>
+
+            <div className="pt-2 border-t border-border">
+              <CouponField code={couponCode} onChange={setCouponCode} idPrefix="pe" />
+            </div>
+
+            <div className="pt-2 border-t border-border">
+              {shippingMethod === "envio" && zipDigits.length === 8 && (
+                <p className="text-xs text-muted-foreground mb-2 text-center">
+                  {shippingPreviewQuery.isFetching
+                    ? "Calculando frete..."
+                    : shippingCentsPreview != null
+                      ? `Total com frete: R$ ${((subtotal + shippingCentsPreview) / 100).toFixed(2)}`
+                      : "Não conseguimos calcular o frete pra esse CEP"}
+                </p>
+              )}
+              <Button
+                className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                disabled={checkoutMutation.isPending}
+                onClick={handleCheckout}
+              >
+                {checkoutMutation.isPending ? "Gerando cobrança..." : "Finalizar com InfinitePay"}
+              </Button>
+            </div>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {/* Cobrança InfinitePay: QR Code + aguardando pagamento */}
       <Dialog open={!!charge} onOpenChange={(open) => { if (!open) closeDialog(); }}>
