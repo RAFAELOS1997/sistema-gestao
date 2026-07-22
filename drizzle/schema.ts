@@ -117,6 +117,14 @@ export const systemConfig = mysqlTable("systemConfig", {
   // InfiniteTag (identificador público, sem o "$") usada pra gerar cobranças
   // via API da InfinitePay — não é uma chave secreta.
   infinitePayHandle: varchar("infinitePayHandle", { length: 100 }),
+  // Frete fixo por região (Fase 1 do plano de expansão nacional) — 3 faixas
+  // simples, sem integração externa nenhuma: local (cidade+UF configurados
+  // abaixo), resto do mesmo estado, resto do Brasil. Tudo em centavos.
+  shippingLocalCity: varchar("shippingLocalCity", { length: 100 }).default("Ribeirão Preto"),
+  shippingLocalState: varchar("shippingLocalState", { length: 2 }).default("SP"),
+  shippingLocalCents: int("shippingLocalCents").default(0).notNull(),
+  shippingStateCents: int("shippingStateCents").default(0).notNull(),
+  shippingNationalCents: int("shippingNationalCents").default(0).notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -279,6 +287,16 @@ export const terreiros = mysqlTable("terreiros", {
   phone: varchar("phone", { length: 20 }),
   logoUrl: mediumtext("logoUrl"), // logo do terreiro, upload do próprio parceiro (base64)
   tierId: int("tierId"), // plano de parceria (Prata/Ouro/Diamante) — define o preço que ele vê
+  // Endereço de entrega do terreiro (Fase 1 do plano de expansão nacional) —
+  // editado pelo próprio parceiro em "Minha Conta", usado nos pedidos feitos
+  // em "Gerar Pedidos" e nas entregas de comodato fora de Ribeirão Preto.
+  shippingZipCode: varchar("shippingZipCode", { length: 9 }),
+  shippingStreet: varchar("shippingStreet", { length: 255 }),
+  shippingNumber: varchar("shippingNumber", { length: 20 }),
+  shippingComplement: varchar("shippingComplement", { length: 100 }),
+  shippingNeighborhood: varchar("shippingNeighborhood", { length: 100 }),
+  shippingCity: varchar("shippingCity", { length: 100 }),
+  shippingState: varchar("shippingState", { length: 2 }),
   isActive: int("isActive").default(1).notNull(),
   mustChangePassword: int("mustChangePassword").default(0).notNull(), // força trocar a senha pré-cadastrada no próximo login
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -414,6 +432,11 @@ export const partnerOrders = mysqlTable("partnerOrders", {
   subtotal: int("subtotal").notNull(), // em centavos
   status: mysqlEnum("status", ["pendente", "confirmado", "entregue", "cancelado"]).notNull().default("pendente"),
   notes: text("notes"),
+  // Frete + rastreio (Fase 1) — entrega usa o endereço já cadastrado do
+  // terreiro (terreiros.shipping*), não precisa duplicar por pedido.
+  shippingCents: int("shippingCents").default(0).notNull(),
+  trackingCode: varchar("trackingCode", { length: 100 }),
+  carrier: varchar("carrier", { length: 100 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -446,10 +469,24 @@ export const publicOrders = mysqlTable("publicOrders", {
   id: int("id").autoincrement().primaryKey(),
   customerName: varchar("customerName", { length: 255 }).notNull(),
   customerPhone: varchar("customerPhone", { length: 20 }).notNull(),
-  subtotal: int("subtotal").notNull(), // em centavos
+  subtotal: int("subtotal").notNull(), // em centavos, só os itens (sem frete)
   status: mysqlEnum("status", ["pendente", "confirmado", "entregue", "cancelado"]).notNull().default("pendente"),
   paymentMethod: varchar("paymentMethod", { length: 50 }), // "infinitepay" pros pedidos de Pronta Entrega já pagos, null pros pedidos por encomenda (Fazer Pedidos)
   notes: text("notes"),
+  // Entrega (Fase 1 do plano de expansão nacional) — cliente do site não tem
+  // conta, então o endereço vai por pedido, não por cadastro. "retirada" não
+  // preenche os campos de endereço (retira na loja, sem frete).
+  shippingMethod: mysqlEnum("shippingMethod", ["retirada", "envio"]).notNull().default("retirada"),
+  shippingZipCode: varchar("shippingZipCode", { length: 9 }),
+  shippingStreet: varchar("shippingStreet", { length: 255 }),
+  shippingNumber: varchar("shippingNumber", { length: 20 }),
+  shippingComplement: varchar("shippingComplement", { length: 100 }),
+  shippingNeighborhood: varchar("shippingNeighborhood", { length: 100 }),
+  shippingCity: varchar("shippingCity", { length: 100 }),
+  shippingState: varchar("shippingState", { length: 2 }),
+  shippingCents: int("shippingCents").default(0).notNull(), // sempre recalculado no servidor, nunca confia no cliente
+  trackingCode: varchar("trackingCode", { length: 100 }),
+  carrier: varchar("carrier", { length: 100 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

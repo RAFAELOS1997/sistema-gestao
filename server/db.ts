@@ -546,6 +546,86 @@ export async function runStartupMigrations() {
     console.error("[migrations] consignmentRequestItems:", error);
   }
 
+  // Endereço + frete (Fase 1 do plano de expansão nacional, 2026-07-21) —
+  // ver server/_core/whatsapp.ts e o artifact do roadmap pra contexto.
+  try {
+    await db.execute(sql`ALTER TABLE systemConfig ADD COLUMN shippingLocalCity varchar(100) DEFAULT 'Ribeirão Preto'`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] systemConfig.shippingLocalCity:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE systemConfig ADD COLUMN shippingLocalState varchar(2) DEFAULT 'SP'`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] systemConfig.shippingLocalState:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE systemConfig ADD COLUMN shippingLocalCents int NOT NULL DEFAULT 0`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] systemConfig.shippingLocalCents:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE systemConfig ADD COLUMN shippingStateCents int NOT NULL DEFAULT 0`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] systemConfig.shippingStateCents:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE systemConfig ADD COLUMN shippingNationalCents int NOT NULL DEFAULT 0`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] systemConfig.shippingNationalCents:", error);
+  }
+
+  for (const col of ["shippingZipCode varchar(9)", "shippingStreet varchar(255)", "shippingNumber varchar(20)", "shippingComplement varchar(100)", "shippingNeighborhood varchar(100)", "shippingCity varchar(100)", "shippingState varchar(2)"]) {
+    try {
+      await db.execute(sql.raw(`ALTER TABLE terreiros ADD COLUMN ${col}`));
+    } catch (error: any) {
+      if (!isDupColumn(error)) console.error(`[migrations] terreiros.${col}:`, error);
+    }
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE partnerOrders ADD COLUMN shippingCents int NOT NULL DEFAULT 0`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] partnerOrders.shippingCents:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE partnerOrders ADD COLUMN trackingCode varchar(100)`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] partnerOrders.trackingCode:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE partnerOrders ADD COLUMN carrier varchar(100)`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] partnerOrders.carrier:", error);
+  }
+
+  try {
+    await db.execute(sql`ALTER TABLE publicOrders ADD COLUMN shippingMethod enum('retirada','envio') NOT NULL DEFAULT 'retirada'`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] publicOrders.shippingMethod:", error);
+  }
+  for (const col of ["shippingZipCode varchar(9)", "shippingStreet varchar(255)", "shippingNumber varchar(20)", "shippingComplement varchar(100)", "shippingNeighborhood varchar(100)", "shippingCity varchar(100)", "shippingState varchar(2)"]) {
+    try {
+      await db.execute(sql.raw(`ALTER TABLE publicOrders ADD COLUMN ${col}`));
+    } catch (error: any) {
+      if (!isDupColumn(error)) console.error(`[migrations] publicOrders.${col}:`, error);
+    }
+  }
+  try {
+    await db.execute(sql`ALTER TABLE publicOrders ADD COLUMN shippingCents int NOT NULL DEFAULT 0`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] publicOrders.shippingCents:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE publicOrders ADD COLUMN trackingCode varchar(100)`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] publicOrders.trackingCode:", error);
+  }
+  try {
+    await db.execute(sql`ALTER TABLE publicOrders ADD COLUMN carrier varchar(100)`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] publicOrders.carrier:", error);
+  }
+
   console.log("[migrations] Verificação de schema concluída.");
 }
 
@@ -1677,12 +1757,13 @@ export async function createPartnerOrder(
     quantity: number;
     unitPrice: number;
     totalPrice: number;
-  }[]
+  }[],
+  shippingCents: number = 0
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
-  const orderResult = await db.insert(partnerOrders).values({ terreiroId, subtotal, status: "pendente" });
+  const orderResult = await db.insert(partnerOrders).values({ terreiroId, subtotal, status: "pendente", shippingCents });
   const orderId = ((orderResult as any)[0]?.insertId ?? (orderResult as any).insertId) as number;
   await db.insert(partnerOrderItems).values(
     items.map((item) => ({
@@ -1726,6 +1807,16 @@ export async function listAllPartnerOrders() {
       subtotal: partnerOrders.subtotal,
       status: partnerOrders.status,
       notes: partnerOrders.notes,
+      shippingCents: partnerOrders.shippingCents,
+      trackingCode: partnerOrders.trackingCode,
+      carrier: partnerOrders.carrier,
+      shippingZipCode: terreiros.shippingZipCode,
+      shippingStreet: terreiros.shippingStreet,
+      shippingNumber: terreiros.shippingNumber,
+      shippingComplement: terreiros.shippingComplement,
+      shippingNeighborhood: terreiros.shippingNeighborhood,
+      shippingCity: terreiros.shippingCity,
+      shippingState: terreiros.shippingState,
       createdAt: partnerOrders.createdAt,
       updatedAt: partnerOrders.updatedAt,
     })
@@ -1863,9 +1954,9 @@ export async function listActiveProductsFullPrice() {
     .orderBy(products.name);
 }
 
-export async function createPublicOrder(
-  customerName: string,
-  customerPhone: string,
+export async function createPublicOrder(data: {
+  customerName: string;
+  customerPhone: string;
   items: {
     source: "catalogo" | "estoque";
     supplierCatalogId?: number;
@@ -1874,16 +1965,43 @@ export async function createPublicOrder(
     quantity: number;
     unitPrice: number;
     totalPrice: number;
-  }[],
-  paymentMethod?: string
-) {
+  }[];
+  paymentMethod?: string | null;
+  shippingMethod: "retirada" | "envio";
+  shippingCents: number;
+  shippingAddress?: {
+    zipCode: string;
+    street: string;
+    number: string;
+    complement?: string | null;
+    neighborhood: string;
+    city: string;
+    state: string;
+  } | null;
+}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const subtotal = items.reduce((sum, item) => sum + item.totalPrice, 0);
-  const orderResult = await db.insert(publicOrders).values({ customerName, customerPhone, subtotal, status: "pendente", paymentMethod: paymentMethod ?? null });
+  const subtotal = data.items.reduce((sum, item) => sum + item.totalPrice, 0);
+  const addr = data.shippingMethod === "envio" ? data.shippingAddress : null;
+  const orderResult = await db.insert(publicOrders).values({
+    customerName: data.customerName,
+    customerPhone: data.customerPhone,
+    subtotal,
+    status: "pendente",
+    paymentMethod: data.paymentMethod ?? null,
+    shippingMethod: data.shippingMethod,
+    shippingZipCode: addr?.zipCode ?? null,
+    shippingStreet: addr?.street ?? null,
+    shippingNumber: addr?.number ?? null,
+    shippingComplement: addr?.complement ?? null,
+    shippingNeighborhood: addr?.neighborhood ?? null,
+    shippingCity: addr?.city ?? null,
+    shippingState: addr?.state ?? null,
+    shippingCents: data.shippingCents,
+  });
   const orderId = ((orderResult as any)[0]?.insertId ?? (orderResult as any).insertId) as number;
   await db.insert(publicOrderItems).values(
-    items.map((item) => ({
+    data.items.map((item) => ({
       publicOrderId: orderId,
       source: item.source,
       supplierCatalogId: item.supplierCatalogId ?? null,
@@ -1894,7 +2012,19 @@ export async function createPublicOrder(
       totalPrice: item.totalPrice,
     }))
   );
-  return { id: orderId, subtotal };
+  return { id: orderId, subtotal, shippingCents: data.shippingCents };
+}
+
+export async function updatePublicOrderTracking(id: number, trackingCode: string | null, carrier: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(publicOrders).set({ trackingCode, carrier }).where(eq(publicOrders.id, id));
+}
+
+export async function updatePartnerOrderTracking(id: number, trackingCode: string | null, carrier: string | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(partnerOrders).set({ trackingCode, carrier }).where(eq(partnerOrders.id, id));
 }
 
 export async function listAllPublicOrders() {

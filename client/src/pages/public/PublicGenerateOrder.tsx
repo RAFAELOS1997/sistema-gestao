@@ -10,10 +10,29 @@ import { toast } from "sonner";
 import { usePublicCart } from "@/contexts/PublicCartContext";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
 import { EntityShortcuts, EntityShortcut } from "@/components/EntityShortcuts";
+import { ShippingMethodPicker, ShippingAddressForm, EMPTY_ADDRESS, isAddressComplete, ShippingMethod, ShippingAddress } from "@/components/public/ShippingFields";
 
 type Source = "catalogo" | "estoque";
 
 const cartKey = (source: Source, id: number) => `${source}:${id}`;
+
+// Espelha computeShippingCents do servidor — só pra mostrar uma prévia antes
+// de enviar; o valor cobrado de verdade é sempre recalculado lá.
+function previewShippingCents(
+  method: ShippingMethod,
+  city: string,
+  state: string,
+  info: { localCity: string; localState: string; localCents: number; stateCents: number; nationalCents: number } | undefined
+): number {
+  if (method === "retirada" || !info) return 0;
+  const normCity = city.trim().toLowerCase();
+  const normState = state.trim().toUpperCase();
+  if (normState && normState === info.localState.toUpperCase()) {
+    if (normCity && normCity === info.localCity.trim().toLowerCase()) return info.localCents;
+    return info.stateCents;
+  }
+  return info.nationalCents;
+}
 
 export default function PublicGenerateOrder() {
   const [source, setSource] = useState<Source>("catalogo");
@@ -24,12 +43,16 @@ export default function PublicGenerateOrder() {
   const [cartExpanded, setCartExpanded] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [confirmedOrder, setConfirmedOrder] = useState<{ id: number; subtotal: number } | null>(null);
+  const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("retirada");
+  const [address, setAddress] = useState<ShippingAddress>(EMPTY_ADDRESS);
+  const [confirmedOrder, setConfirmedOrder] = useState<{ id: number; subtotal: number; shippingCents: number } | null>(null);
 
   const catalogQuery = trpc.publicStore.orderCatalog.catalog.useQuery();
   const stockQuery = trpc.publicStore.orderCatalog.stock.useQuery();
   const minimumQuery = trpc.publicStore.orders.minimumCents.useQuery();
+  const shippingInfoQuery = trpc.publicStore.shipping.info.useQuery();
   const minimumCents = minimumQuery.data ?? 15000;
+  const shippingCentsPreview = previewShippingCents(shippingMethod, address.city, address.state, shippingInfoQuery.data);
 
   const items = source === "catalogo" ? catalogQuery.data ?? [] : stockQuery.data ?? [];
   const isLoading = source === "catalogo" ? catalogQuery.isLoading : stockQuery.isLoading;
@@ -42,7 +65,7 @@ export default function PublicGenerateOrder() {
 
   const createOrderMutation = trpc.publicStore.orders.create.useMutation({
     onSuccess: (result) => {
-      setConfirmedOrder({ id: result.orderId, subtotal: result.subtotal });
+      setConfirmedOrder({ id: result.orderId, subtotal: result.subtotal, shippingCents: result.shippingCents });
       clearCart();
       setCartExpanded(false);
     },
@@ -88,21 +111,31 @@ export default function PublicGenerateOrder() {
       toast.error("Informe seu nome e telefone pra podermos confirmar o pedido");
       return;
     }
+    if (shippingMethod === "envio" && !isAddressComplete(address)) {
+      toast.error("Preencha o endereço de entrega completo (CEP, número, bairro, cidade e UF)");
+      return;
+    }
     createOrderMutation.mutate({
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       items: cartItems.map((i) => ({ source: i.source, id: i.id, quantity: i.quantity })),
+      shippingMethod,
+      shippingAddress: shippingMethod === "envio" ? address : undefined,
     });
   };
 
   if (confirmedOrder) {
+    const total = confirmedOrder.subtotal + confirmedOrder.shippingCents;
     return (
       <div className="max-w-md mx-auto py-10 text-center space-y-4">
         <CheckCircle2 className="w-14 h-14 text-green-500 mx-auto" />
         <div>
           <h1 className="text-xl font-bold text-foreground">Pedido enviado!</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Pedido #{confirmedOrder.id} — R$ {(confirmedOrder.subtotal / 100).toFixed(2)}
+            Pedido #{confirmedOrder.id} — R$ {(total / 100).toFixed(2)}
+            {confirmedOrder.shippingCents > 0 && (
+              <span className="block text-xs mt-0.5">(inclui R$ {(confirmedOrder.shippingCents / 100).toFixed(2)} de frete)</span>
+            )}
           </p>
         </div>
         <p className="text-sm text-muted-foreground">
@@ -136,8 +169,8 @@ export default function PublicGenerateOrder() {
         </p>
       </div>
 
-      <p className="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-        Por enquanto entregamos só em Ribeirão Preto e região — em breve, pra todo o Brasil!
+      <p className="text-xs text-accent bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
+        Entregamos pra todo o Brasil pelos Correios — ou você pode retirar direto na loja, em Ribeirão Preto.
       </p>
 
       <EntityShortcuts
@@ -316,6 +349,14 @@ export default function PublicGenerateOrder() {
                       />
                     </div>
                   </div>
+
+                  <div className="pt-2 border-t border-border space-y-2">
+                    <Label className="text-xs">Como você quer receber?</Label>
+                    <ShippingMethodPicker method={shippingMethod} onChange={setShippingMethod} idPrefix="fp" />
+                    {shippingMethod === "envio" && (
+                      <ShippingAddressForm address={address} onChange={setAddress} idPrefix="fp" />
+                    )}
+                  </div>
                 </CardContent>
               )}
 
@@ -323,6 +364,10 @@ export default function PublicGenerateOrder() {
                 {missingForMinimum > 0 ? (
                   <p className="text-xs text-amber-400 mb-2 text-center">
                     Faltam R$ {(missingForMinimum / 100).toFixed(2)} pra atingir o pedido mínimo de R$ {(minimumCents / 100).toFixed(2)} nos itens do fornecedor
+                  </p>
+                ) : shippingMethod === "envio" && shippingCentsPreview > 0 ? (
+                  <p className="text-xs text-muted-foreground mb-2 text-center">
+                    + R$ {(shippingCentsPreview / 100).toFixed(2)} de frete estimado
                   </p>
                 ) : null}
                 <Button

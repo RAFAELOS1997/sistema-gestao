@@ -12,6 +12,25 @@ import { useProntaEntregaCart } from "@/contexts/ProntaEntregaCartContext";
 import { QRCodeSVG } from "qrcode.react";
 import { CATEGORY_LABELS, categoryIcon } from "@/lib/categoryMeta";
 import { EntityShortcuts, EntityShortcut } from "@/components/EntityShortcuts";
+import { ShippingMethodPicker, ShippingAddressForm, EMPTY_ADDRESS, isAddressComplete, ShippingMethod, ShippingAddress } from "@/components/public/ShippingFields";
+
+// Espelha computeShippingCents do servidor — só pra mostrar uma prévia antes
+// de enviar; o valor cobrado de verdade é sempre recalculado lá.
+function previewShippingCents(
+  method: ShippingMethod,
+  city: string,
+  state: string,
+  info: { localCity: string; localState: string; localCents: number; stateCents: number; nationalCents: number } | undefined
+): number {
+  if (method === "retirada" || !info) return 0;
+  const normCity = city.trim().toLowerCase();
+  const normState = state.trim().toUpperCase();
+  if (normState && normState === info.localState.toUpperCase()) {
+    if (normCity && normCity === info.localCity.trim().toLowerCase()) return info.localCents;
+    return info.stateCents;
+  }
+  return info.nationalCents;
+}
 
 export default function PublicCatalogProducts() {
   const [search, setSearch] = useState("");
@@ -21,15 +40,19 @@ export default function PublicCatalogProducts() {
   const [cartExpanded, setCartExpanded] = useState(false);
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
-  const [charge, setCharge] = useState<{ orderNsu: string; checkoutUrl: string } | null>(null);
+  const [shippingMethod, setShippingMethod] = useState<ShippingMethod>("retirada");
+  const [address, setAddress] = useState<ShippingAddress>(EMPTY_ADDRESS);
+  const [charge, setCharge] = useState<{ orderNsu: string; checkoutUrl: string; total: number } | null>(null);
   const [paid, setPaid] = useState(false);
 
   const utils = trpc.useUtils();
   const productsQuery = trpc.publicStore.products.list.useQuery();
   const products = productsQuery.data ?? [];
+  const shippingInfoQuery = trpc.publicStore.shipping.info.useQuery();
+  const shippingCentsPreview = previewShippingCents(shippingMethod, address.city, address.state, shippingInfoQuery.data);
 
   const checkoutMutation = trpc.publicStore.prontaEntrega.checkout.useMutation({
-    onSuccess: (result) => setCharge({ orderNsu: result.orderNsu, checkoutUrl: result.checkoutUrl }),
+    onSuccess: (result) => setCharge({ orderNsu: result.orderNsu, checkoutUrl: result.checkoutUrl, total: result.subtotal + result.shippingCents }),
     onError: (error) => toast.error(error.message),
   });
 
@@ -82,10 +105,16 @@ export default function PublicCatalogProducts() {
       toast.error("Informe seu nome e telefone");
       return;
     }
+    if (shippingMethod === "envio" && !isAddressComplete(address)) {
+      toast.error("Preencha o endereço de entrega completo (CEP, número, bairro, cidade e UF)");
+      return;
+    }
     checkoutMutation.mutate({
       customerName: customerName.trim(),
       customerPhone: customerPhone.trim(),
       items: cartItems.map((i) => ({ productId: i.id, quantity: i.quantity })),
+      shippingMethod,
+      shippingAddress: shippingMethod === "envio" ? address : undefined,
     });
   };
 
@@ -117,8 +146,8 @@ export default function PublicCatalogProducts() {
         </p>
       </div>
 
-      <p className="text-xs text-amber-500 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2">
-        Por enquanto entregamos só em Ribeirão Preto e região — em breve, pra todo o Brasil!
+      <p className="text-xs text-accent bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
+        Entregamos pra todo o Brasil pelos Correios — ou você pode retirar direto na loja, em Ribeirão Preto.
       </p>
 
       <EntityShortcuts
@@ -283,10 +312,23 @@ export default function PublicCatalogProducts() {
                       />
                     </div>
                   </div>
+
+                  <div className="pt-2 border-t border-border space-y-2">
+                    <Label className="text-xs">Como você quer receber?</Label>
+                    <ShippingMethodPicker method={shippingMethod} onChange={setShippingMethod} idPrefix="pe" />
+                    {shippingMethod === "envio" && (
+                      <ShippingAddressForm address={address} onChange={setAddress} idPrefix="pe" />
+                    )}
+                  </div>
                 </CardContent>
               )}
 
               <div className="px-4 pb-4">
+                {shippingMethod === "envio" && shippingCentsPreview > 0 && (
+                  <p className="text-xs text-muted-foreground mb-2 text-center">
+                    Total com frete: R$ {((subtotal + shippingCentsPreview) / 100).toFixed(2)}
+                  </p>
+                )}
                 <Button
                   className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
                   disabled={checkoutMutation.isPending}
@@ -309,7 +351,7 @@ export default function PublicCatalogProducts() {
               Pagamento
             </DialogTitle>
             <DialogDescription>
-              R$ {(subtotal / 100).toFixed(2)} — escaneie o QR Code com a câmera do celular ou abra o link
+              R$ {((charge?.total ?? subtotal) / 100).toFixed(2)} — escaneie o QR Code com a câmera do celular ou abra o link
             </DialogDescription>
           </DialogHeader>
 

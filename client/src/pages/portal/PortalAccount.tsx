@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { Loader2, Upload, X, UserPlus, Users, KeyRound } from "lucide-react";
+import { Loader2, Upload, X, UserPlus, Users, KeyRound, MapPin } from "lucide-react";
+import { ShippingAddressForm, EMPTY_ADDRESS, ShippingAddress } from "@/components/public/ShippingFields";
 
 // Mesmo padrão usado no cadastro de produtos: redimensiona no navegador
 // antes de mandar, pra não estourar o limite de tamanho salvo no banco.
@@ -41,11 +42,23 @@ export default function PortalAccount() {
   const me = meQuery.data;
 
   const [form, setForm] = useState({ contactName: "", phone: "" });
+  const [address, setAddress] = useState<ShippingAddress>(EMPTY_ADDRESS);
   const [uploadingLogo, setUploadingLogo] = useState(false);
   const [passwordForm, setPasswordForm] = useState({ currentPassword: "", newPassword: "", confirmPassword: "" });
 
   useEffect(() => {
-    if (me) setForm({ contactName: me.contactName ?? "", phone: me.phone ?? "" });
+    if (me) {
+      setForm({ contactName: me.contactName ?? "", phone: me.phone ?? "" });
+      setAddress({
+        zipCode: me.shippingZipCode ?? "",
+        street: me.shippingStreet ?? "",
+        number: me.shippingNumber ?? "",
+        complement: me.shippingComplement ?? "",
+        neighborhood: me.shippingNeighborhood ?? "",
+        city: me.shippingCity ?? "",
+        state: me.shippingState ?? "",
+      });
+    }
   }, [me]);
 
   const updateProfileMutation = trpc.portal.profile.update.useMutation({
@@ -95,7 +108,17 @@ export default function PortalAccount() {
 
   const handleSaveProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    updateProfileMutation.mutate({ contactName: form.contactName || undefined, phone: form.phone || undefined });
+    updateProfileMutation.mutate({
+      contactName: form.contactName || undefined,
+      phone: form.phone || undefined,
+      shippingZipCode: address.zipCode || undefined,
+      shippingStreet: address.street || undefined,
+      shippingNumber: address.number || undefined,
+      shippingComplement: address.complement || undefined,
+      shippingNeighborhood: address.neighborhood || undefined,
+      shippingCity: address.city || undefined,
+      shippingState: address.state || undefined,
+    });
   };
 
   const handleChangePassword = (e: React.FormEvent) => {
@@ -215,6 +238,15 @@ export default function PortalAccount() {
                 className="mt-1"
                 placeholder="(00) 00000-0000"
               />
+            </div>
+            <div className="sm:col-span-2 pt-2 border-t border-border space-y-2">
+              <Label className="text-xs flex items-center gap-1">
+                <MapPin className="w-3.5 h-3.5" /> Endereço de entrega
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Usado nos pedidos que você faz em "Gerar Pedidos" e nas entregas de comodato fora de Ribeirão Preto.
+              </p>
+              <ShippingAddressForm address={address} onChange={setAddress} idPrefix="terreiro" />
             </div>
             <div className="sm:col-span-2">
               <Button type="submit" className="bg-accent text-accent-foreground hover:bg-accent/90" disabled={updateProfileMutation.isPending}>

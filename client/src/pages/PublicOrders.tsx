@@ -1,10 +1,56 @@
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { trpc } from "@/lib/trpc";
-import { Store } from "lucide-react";
+import { Store, Truck, PackageCheck } from "lucide-react";
 import { toast } from "sonner";
+
+function formatAddress(order: any): string | null {
+  if (order.shippingMethod !== "envio") return null;
+  const parts = [
+    [order.shippingStreet, order.shippingNumber].filter(Boolean).join(", "),
+    order.shippingComplement,
+    order.shippingNeighborhood,
+    [order.shippingCity, order.shippingState].filter(Boolean).join("/"),
+    order.shippingZipCode,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(" — ") : null;
+}
+
+function TrackingEditor({ order }: { order: any }) {
+  const utils = trpc.useUtils();
+  const [trackingCode, setTrackingCode] = useState(order.trackingCode ?? "");
+  const [carrier, setCarrier] = useState(order.carrier ?? "");
+  const mutation = trpc.publicOrders.updateTracking.useMutation({
+    onSuccess: () => {
+      toast.success("Rastreio salvo!");
+      utils.publicOrders.list.invalidate();
+    },
+    onError: (error) => toast.error(error.message),
+  });
+  const changed = trackingCode !== (order.trackingCode ?? "") || carrier !== (order.carrier ?? "");
+  return (
+    <div className="flex flex-col sm:flex-row gap-2 mt-2">
+      <Input value={carrier} onChange={(e) => setCarrier(e.target.value)} placeholder="Transportadora (ex: Correios)" className="h-8 text-xs" />
+      <Input value={trackingCode} onChange={(e) => setTrackingCode(e.target.value)} placeholder="Código de rastreio" className="h-8 text-xs" />
+      {changed && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 shrink-0"
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate({ id: order.id, trackingCode, carrier })}
+        >
+          <PackageCheck className="w-3.5 h-3.5 mr-1" /> Salvar
+        </Button>
+      )}
+    </div>
+  );
+}
 
 const STATUS_LABELS: Record<string, string> = {
   pendente: "Pendente",
@@ -88,11 +134,19 @@ export default function PublicOrders() {
                     ))}
                   </div>
                   <div className="flex items-center justify-between pt-1 border-t border-border">
-                    <p className="text-sm font-bold text-accent">R$ {(order.subtotal / 100).toFixed(2)}</p>
+                    <p className="text-sm font-bold text-accent">
+                      R$ {((order.subtotal + (order.shippingCents ?? 0)) / 100).toFixed(2)}
+                      {order.shippingCents > 0 && <span className="text-xs font-normal text-muted-foreground"> (frete R$ {(order.shippingCents / 100).toFixed(2)})</span>}
+                    </p>
                     <p className="text-xs text-muted-foreground">
                       {new Date(order.createdAt).toLocaleDateString("pt-BR")}
                     </p>
                   </div>
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {order.shippingMethod === "envio" ? <Truck className="w-3.5 h-3.5 shrink-0" /> : <Store className="w-3.5 h-3.5 shrink-0" />}
+                    {order.shippingMethod === "envio" ? formatAddress(order) ?? "Enviar (endereço não informado)" : "Retirada na loja"}
+                  </div>
+                  {order.shippingMethod === "envio" && <TrackingEditor order={order} />}
                   <Select
                     value={order.status}
                     onValueChange={(status) => updateStatusMutation.mutate({ id: order.id, status: status as any })}
@@ -118,6 +172,7 @@ export default function PublicOrders() {
                   <TableHead>Pedido</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead>Itens</TableHead>
+                  <TableHead>Entrega</TableHead>
                   <TableHead>Total</TableHead>
                   <TableHead>Data</TableHead>
                   <TableHead className="text-right">Status</TableHead>
@@ -145,7 +200,17 @@ export default function PublicOrders() {
                         .map((item: any) => `${item.quantity}x ${item.name}${item.source === "estoque" ? " (estoque)" : ""}`)
                         .join(", ")}
                     </TableCell>
-                    <TableCell className="font-semibold text-accent">R$ {(order.subtotal / 100).toFixed(2)}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs max-w-[220px]">
+                      <div className="flex items-center gap-1">
+                        {order.shippingMethod === "envio" ? <Truck className="w-3.5 h-3.5 shrink-0" /> : <Store className="w-3.5 h-3.5 shrink-0" />}
+                        <span>{order.shippingMethod === "envio" ? formatAddress(order) ?? "Sem endereço" : "Retirada"}</span>
+                      </div>
+                      {order.shippingMethod === "envio" && <TrackingEditor order={order} />}
+                    </TableCell>
+                    <TableCell className="font-semibold text-accent">
+                      R$ {((order.subtotal + (order.shippingCents ?? 0)) / 100).toFixed(2)}
+                      {order.shippingCents > 0 && <div className="text-[10px] font-normal text-muted-foreground">frete R$ {(order.shippingCents / 100).toFixed(2)}</div>}
+                    </TableCell>
                     <TableCell className="text-muted-foreground text-sm">
                       {new Date(order.createdAt).toLocaleDateString("pt-BR")}
                     </TableCell>

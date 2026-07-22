@@ -111,6 +111,8 @@ import {
   createPublicOrder,
   listAllPublicOrders,
   updatePublicOrderStatus,
+  updatePublicOrderTracking,
+  updatePartnerOrderTracking,
   fulfillPublicOrderForCharge,
   recalculatePartnerTierByOrders,
   ensureMinimumBronzeForConsignment,
@@ -1047,6 +1049,42 @@ const settingsRouter = router({
       return { success: true };
     }),
 
+  // Frete fixo por região (Fase 1 do plano de expansão nacional) — 3 faixas
+  // simples: local (a cidade/estado da loja), resto do mesmo estado, resto
+  // do Brasil. Tudo em centavos, 0 = grátis.
+  getShippingConfig: protectedProcedure.query(async () => {
+    const config = await getSystemConfig();
+    return {
+      shippingLocalCity: config?.shippingLocalCity ?? "Ribeirão Preto",
+      shippingLocalState: config?.shippingLocalState ?? "SP",
+      shippingLocalCents: config?.shippingLocalCents ?? 0,
+      shippingStateCents: config?.shippingStateCents ?? 0,
+      shippingNationalCents: config?.shippingNationalCents ?? 0,
+    };
+  }),
+
+  updateShippingConfig: protectedProcedure
+    .input(
+      z.object({
+        shippingLocalCity: z.string().min(1).max(100),
+        shippingLocalState: z.string().length(2),
+        shippingLocalCents: z.number().int().min(0),
+        shippingStateCents: z.number().int().min(0),
+        shippingNationalCents: z.number().int().min(0),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      await updateSystemConfig(input);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "shipping_config_updated",
+        module: "settings",
+        description: "Configuração de frete atualizada",
+        changes: JSON.stringify(input),
+      });
+      return { success: true };
+    }),
+
   listRoles: protectedProcedure.query(() => listRoles()),
 
   listPermissions: protectedProcedure.query(() => listPermissions()),
@@ -1221,6 +1259,46 @@ const computePublicOrderItemPrice = (costCents: number, fullPriceCents: number) 
   const minPrice = Math.ceil(costCents * MIN_ORDER_MARGIN_MULT);
   return Math.max(markedUpPrice, minPrice);
 };
+
+// Frete fixo por região (Fase 1 do plano de expansão nacional) — 3 faixas
+// simples configuradas em Pagamentos > Frete, sem nenhuma integração externa.
+// Sempre recalculado aqui no servidor a partir do endereço, nunca confia num
+// valor de frete vindo do cliente.
+type ShippingConfig = {
+  shippingLocalCity: string | null;
+  shippingLocalState: string | null;
+  shippingLocalCents: number;
+  shippingStateCents: number;
+  shippingNationalCents: number;
+};
+const computeShippingCents = (
+  method: "retirada" | "envio",
+  city: string | null | undefined,
+  state: string | null | undefined,
+  config: ShippingConfig | null
+): number => {
+  if (method === "retirada") return 0;
+  if (!config) return 0;
+  const normCity = (city ?? "").trim().toLowerCase();
+  const normState = (state ?? "").trim().toUpperCase();
+  const localCity = (config.shippingLocalCity ?? "").trim().toLowerCase();
+  const localState = (config.shippingLocalState ?? "").trim().toUpperCase();
+  if (normState && localState && normState === localState) {
+    if (normCity && localCity && normCity === localCity) return config.shippingLocalCents;
+    return config.shippingStateCents;
+  }
+  return config.shippingNationalCents;
+};
+
+const shippingAddressSchema = z.object({
+  zipCode: z.string().min(8).max(9),
+  street: z.string().min(1).max(255),
+  number: z.string().min(1).max(20),
+  complement: z.string().max(100).optional(),
+  neighborhood: z.string().min(1).max(100),
+  city: z.string().min(1).max(100),
+  state: z.string().length(2),
+});
 
 const supplierCatalogRouter = router({
   list: protectedProcedure
@@ -1758,6 +1836,13 @@ const portalRouter = router({
       tierName: tier?.name ?? null,
       mustChangePassword,
       loggedInAsName,
+      shippingZipCode: ctx.terreiro.shippingZipCode,
+      shippingStreet: ctx.terreiro.shippingStreet,
+      shippingNumber: ctx.terreiro.shippingNumber,
+      shippingComplement: ctx.terreiro.shippingComplement,
+      shippingNeighborhood: ctx.terreiro.shippingNeighborhood,
+      shippingCity: ctx.terreiro.shippingCity,
+      shippingState: ctx.terreiro.shippingState,
     };
   }),
 
@@ -1806,11 +1891,30 @@ const portalRouter = router({
   // admin (evita lockout e evita burlar o avanço automático de plano).
   profile: router({
     update: terreiroProcedure
-      .input(z.object({ contactName: z.string().max(255).optional(), phone: z.string().max(20).optional() }))
+      .input(
+        z.object({
+          contactName: z.string().max(255).optional(),
+          phone: z.string().max(20).optional(),
+          shippingZipCode: z.string().max(9).optional(),
+          shippingStreet: z.string().max(255).optional(),
+          shippingNumber: z.string().max(20).optional(),
+          shippingComplement: z.string().max(100).optional(),
+          shippingNeighborhood: z.string().max(100).optional(),
+          shippingCity: z.string().max(100).optional(),
+          shippingState: z.string().max(2).optional(),
+        })
+      )
       .mutation(async ({ input, ctx }) => {
         await updateTerreiro(ctx.terreiro.id, {
           contactName: input.contactName ?? undefined,
           phone: input.phone ?? undefined,
+          shippingZipCode: input.shippingZipCode ?? undefined,
+          shippingStreet: input.shippingStreet ?? undefined,
+          shippingNumber: input.shippingNumber ?? undefined,
+          shippingComplement: input.shippingComplement ?? undefined,
+          shippingNeighborhood: input.shippingNeighborhood ?? undefined,
+          shippingCity: input.shippingCity ?? undefined,
+          shippingState: input.shippingState ?? undefined,
         });
         return { success: true };
       }),
@@ -2018,13 +2122,18 @@ const portalRouter = router({
           });
         }
 
-        const order = await createPartnerOrder(ctx.terreiro.id, orderItems);
-        notifyPartnerOrder(ctx.terreiro.name, order.subtotal);
+        // Entrega usa o endereço já cadastrado do terreiro (Minha Conta) — se
+        // ele ainda não preencheu, frete fica 0 e Rafael combina manualmente.
+        const shippingConfig = await getSystemConfig();
+        const shippingCents = computeShippingCents("envio", ctx.terreiro.shippingCity, ctx.terreiro.shippingState, shippingConfig);
+        const order = await createPartnerOrder(ctx.terreiro.id, orderItems, shippingCents);
+        notifyPartnerOrder(ctx.terreiro.name, order.subtotal + shippingCents);
         const tierUpdate = await recalculatePartnerTierByOrders(ctx.terreiro.id);
         return {
           success: true,
           orderId: order.id,
           subtotal: order.subtotal,
+          shippingCents,
           tierUpgraded: tierUpdate?.upgraded ?? false,
           newTierName: tierUpdate?.upgraded ? tierUpdate.tierName : null,
         };
@@ -2038,6 +2147,22 @@ const portalRouter = router({
 // aba Fazer Pedidos. Nunca revela quem é o fornecedor, igual ao portal.
 
 const publicStoreRouter = router({
+  // Frete (Fase 1 do plano de expansão nacional): info pública pro cliente
+  // ver "grátis em Ribeirão Preto" etc. antes de fechar — o valor cobrado de
+  // verdade é sempre recalculado no servidor na hora de criar o pedido.
+  shipping: router({
+    info: publicProcedure.query(async () => {
+      const config = await getSystemConfig();
+      return {
+        localCity: config?.shippingLocalCity ?? "Ribeirão Preto",
+        localState: config?.shippingLocalState ?? "SP",
+        localCents: config?.shippingLocalCents ?? 0,
+        stateCents: config?.shippingStateCents ?? 0,
+        nationalCents: config?.shippingNationalCents ?? 0,
+      };
+    }),
+  }),
+
   // Aba "Produtos": só o estoque da loja, preço cheio, pra qualquer visitante ver.
   products: router({
     list: publicProcedure.query(async () => {
@@ -2065,6 +2190,8 @@ const publicStoreRouter = router({
           customerName: z.string().min(1).max(255),
           customerPhone: z.string().min(8).max(20),
           items: z.array(z.object({ productId: z.number().int().positive(), quantity: z.number().int().positive() })).min(1),
+          shippingMethod: z.enum(["retirada", "envio"]).default("retirada"),
+          shippingAddress: shippingAddressSchema.optional(),
         })
       )
       .mutation(async ({ input }) => {
@@ -2075,6 +2202,9 @@ const publicStoreRouter = router({
             code: "PRECONDITION_FAILED",
             message: "A loja ainda não configurou pagamento online. Fale com a gente pra finalizar seu pedido.",
           });
+        }
+        if (input.shippingMethod === "envio" && !input.shippingAddress) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o endereço de entrega" });
         }
 
         const stockItems = await listActiveProductsFullPrice();
@@ -2096,28 +2226,39 @@ const publicStoreRouter = router({
           };
         });
         const subtotal = orderItems.reduce((sum, item) => sum + item.totalPrice, 0);
+        const shippingCents = computeShippingCents(input.shippingMethod, input.shippingAddress?.city, input.shippingAddress?.state, config);
 
-        const order = await createPublicOrder(input.customerName, input.customerPhone, orderItems, "infinitepay");
+        const order = await createPublicOrder({
+          customerName: input.customerName,
+          customerPhone: input.customerPhone,
+          items: orderItems,
+          paymentMethod: "infinitepay",
+          shippingMethod: input.shippingMethod,
+          shippingCents,
+          shippingAddress: input.shippingAddress ?? null,
+        });
 
         // Se a InfinitePay falhar aqui, o pedido já foi gravado — cancela
         // pra não ficar "pendente" pra sempre sem cobrança nenhuma vinculada
         // (senão fica um lixo confuso em "Pedidos do Site").
         try {
           const orderNsu = randomUUID();
+          const chargeItems = orderItems.map((i) => ({ quantity: i.quantity, price: i.unitPrice, description: i.name }));
+          if (shippingCents > 0) chargeItems.push({ quantity: 1, price: shippingCents, description: "Frete" });
           const { url } = await createPaymentLink({
             handle,
             orderNsu,
-            items: orderItems.map((i) => ({ quantity: i.quantity, price: i.unitPrice, description: i.name })),
+            items: chargeItems,
             webhookUrl: `${PUBLIC_BASE_URL}/api/webhooks/infinitepay`,
           });
           await createInfinitePayCharge({
             orderNsu,
-            amountCents: subtotal,
+            amountCents: subtotal + shippingCents,
             description: `Pedido site #${order.id}`,
             checkoutUrl: url,
             publicOrderId: order.id,
           });
-          return { orderNsu, checkoutUrl: url, orderId: order.id, subtotal };
+          return { orderNsu, checkoutUrl: url, orderId: order.id, subtotal, shippingCents };
         } catch (error) {
           await updatePublicOrderStatus(order.id, "cancelado");
           throw error;
@@ -2197,9 +2338,14 @@ const publicStoreRouter = router({
               })
             )
             .min(1),
+          shippingMethod: z.enum(["retirada", "envio"]).default("retirada"),
+          shippingAddress: shippingAddressSchema.optional(),
         })
       )
       .mutation(async ({ input }) => {
+        if (input.shippingMethod === "envio" && !input.shippingAddress) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Informe o endereço de entrega" });
+        }
         const catalogItems = await listAvailableSupplierCatalogForOrders();
         const catalogById = new Map(catalogItems.map((i) => [i.id, i]));
         const stockItems = await listActiveProductsFullPrice();
@@ -2246,9 +2392,18 @@ const publicStoreRouter = router({
           });
         }
 
-        const order = await createPublicOrder(input.customerName, input.customerPhone, orderItems);
-        notifyPublicOrder(input.customerName, subtotal);
-        return { success: true, orderId: order.id, subtotal };
+        const config = await getSystemConfig();
+        const shippingCents = computeShippingCents(input.shippingMethod, input.shippingAddress?.city, input.shippingAddress?.state, config);
+        const order = await createPublicOrder({
+          customerName: input.customerName,
+          customerPhone: input.customerPhone,
+          items: orderItems,
+          shippingMethod: input.shippingMethod,
+          shippingCents,
+          shippingAddress: input.shippingAddress ?? null,
+        });
+        notifyPublicOrder(input.customerName, subtotal + shippingCents);
+        return { success: true, orderId: order.id, subtotal, shippingCents };
       }),
   }),
 });
@@ -2267,6 +2422,19 @@ const publicOrdersRouter = router({
         action: "public_order_status_updated",
         module: "public_store",
         description: `Pedido do site ID ${input.id} marcado como "${input.status}"`,
+      });
+      return { success: true };
+    }),
+
+  updateTracking: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), trackingCode: z.string().max(100).optional(), carrier: z.string().max(100).optional() }))
+    .mutation(async ({ input, ctx }) => {
+      await updatePublicOrderTracking(input.id, input.trackingCode?.trim() || null, input.carrier?.trim() || null);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "public_order_tracking_updated",
+        module: "public_store",
+        description: `Pedido do site ID ${input.id}: rastreio atualizado`,
       });
       return { success: true };
     }),
@@ -2356,6 +2524,19 @@ const partnerOrdersRouter = router({
         action: "partner_order_status_updated",
         module: "partners",
         description: `Pedido de parceiro ID ${input.id} marcado como "${input.status}"`,
+      });
+      return { success: true };
+    }),
+
+  updateTracking: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), trackingCode: z.string().max(100).optional(), carrier: z.string().max(100).optional() }))
+    .mutation(async ({ input, ctx }) => {
+      await updatePartnerOrderTracking(input.id, input.trackingCode?.trim() || null, input.carrier?.trim() || null);
+      await createAuditLog({
+        userId: ctx.user.id,
+        action: "partner_order_tracking_updated",
+        module: "partners",
+        description: `Pedido de parceiro ID ${input.id}: rastreio atualizado`,
       });
       return { success: true };
     }),
