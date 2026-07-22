@@ -680,6 +680,11 @@ export async function runStartupMigrations() {
   } catch (error: any) {
     if (!isDupColumn(error)) console.error("[migrations] partnerApplications.address:", error);
   }
+  try {
+    await seedProspectionLeads();
+  } catch (error: any) {
+    console.error("[migrations] seedProspectionLeads:", error);
+  }
 
   console.log("[migrations] Verificação de schema concluída.");
 }
@@ -2034,6 +2039,80 @@ export async function deletePartnerApplication(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(partnerApplications).where(eq(partnerApplications.id, id));
+}
+
+// Leads iniciais de prospecção — terreiros/centros de Umbanda e Candomblé
+// REAIS de Ribeirão Preto, achados por pesquisa (nunca inventados). Ferramenta
+// de descoberta automática de verdade (tipo Google Places) exigiria uma
+// chave de API paga configurada pelo Rafael; enquanto isso não existe, essa
+// função é o "algoritmo" — roda uma vez, adiciona quem ainda não está
+// cadastrado (dedup por nome, nunca duplica nem sobrescreve o que já foi
+// editado/movido de status).
+export async function seedProspectionLeads() {
+  const db = await getDb();
+  if (!db) return;
+  const leads: { terreiroName: string; address: string; city: string; instagram?: string; phone?: string; notes: string }[] = [
+    {
+      terreiroName: "Terreiro de Umbanda Caboclo Samambaia e Ogum de Ronda",
+      address: "Rua Piauí, 2061 — Ipiranga",
+      city: "Ribeirão Preto",
+      notes: "Achado por pesquisa (Solutudo).",
+    },
+    {
+      terreiroName: "CEIA Umbanda (Centro de Estudos e Irradiações do Aumbandan)",
+      address: "Rua Marechal Deodoro, 2586 — Alto da Boa Vista",
+      city: "Ribeirão Preto",
+      instagram: "@ceia_umbanda",
+      notes: "Achado por pesquisa (Instagram).",
+    },
+    {
+      terreiroName: "Templo de Umbanda Pai João da Caridade",
+      address: "Rua Bernardo Guimarães, 512 — Jardim Piratininga",
+      city: "Ribeirão Preto",
+      notes: "Achado por pesquisa (registro de empresa, CNPJ 09.541.655/0001-41).",
+    },
+    {
+      terreiroName: "Tenda de Umbanda Mané Baiano",
+      address: "Rua Aurélio Mosca, 151 — Jardim Heitor Rigon",
+      city: "Ribeirão Preto",
+      notes: "Achado por pesquisa (igrejas.net.br).",
+    },
+    {
+      terreiroName: "Templo de Umbanda Ilê Axé Oba Menan",
+      address: "Rua Martin Afonso de Souza, 1187 — Alto do Ipiranga",
+      city: "Ribeirão Preto",
+      notes: "Casa de candomblé. Achado por pesquisa (registro de empresa, CNPJ 54.923.073/0001-84).",
+    },
+    {
+      terreiroName: "Ilê Asé d'Oya",
+      address: "Rua Jorge de Lima, 1764 — Jardim Maria Gorete",
+      city: "Ribeirão Preto",
+      phone: "16988138913",
+      notes: "Casa de candomblé. Achado por pesquisa.",
+    },
+    {
+      terreiroName: "Tenda Espírita de Umbanda Pai Joaquim de Guiné",
+      address: "Rua João Ramalho, 300 — Campos Elíseos",
+      city: "Ribeirão Preto",
+      notes: "Achado por pesquisa (registro de empresa, CNPJ 51.820.637/0001-65, fundada em 1983).",
+    },
+  ];
+  for (const lead of leads) {
+    const existing = await db.select().from(partnerApplications).where(eq(partnerApplications.terreiroName, lead.terreiroName)).limit(1);
+    if (existing.length === 0) {
+      await db.insert(partnerApplications).values({
+        terreiroName: lead.terreiroName,
+        contactName: "A definir",
+        phone: lead.phone ?? "A confirmar",
+        city: lead.city,
+        instagram: lead.instagram ?? null,
+        address: lead.address,
+        notes: lead.notes,
+        status: "pendente",
+        source: "prospeccao",
+      });
+    }
+  }
 }
 
 // ─── Catálogo Público (loja online, sem login) ─────────────────────────────────
