@@ -626,6 +626,14 @@ export async function runStartupMigrations() {
     if (!isDupColumn(error)) console.error("[migrations] publicOrders.carrier:", error);
   }
 
+  for (const col of ["weightGrams", "lengthCm", "widthCm", "heightCm"]) {
+    try {
+      await db.execute(sql.raw(`ALTER TABLE products ADD COLUMN ${col} int`));
+    } catch (error: any) {
+      if (!isDupColumn(error)) console.error(`[migrations] products.${col}:`, error);
+    }
+  }
+
   console.log("[migrations] Verificação de schema concluída.");
 }
 

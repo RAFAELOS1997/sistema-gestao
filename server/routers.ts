@@ -184,6 +184,10 @@ const productsRouter = router({
         minimumStock: z.number().int().min(0),
         description: z.string().optional(),
         imageUrl: z.string().optional().nullable(),
+        weightGrams: z.number().int().positive().optional().nullable(),
+        lengthCm: z.number().int().positive().optional().nullable(),
+        widthCm: z.number().int().positive().optional().nullable(),
+        heightCm: z.number().int().positive().optional().nullable(),
       })
     )
     .mutation(async ({ input }) => {
@@ -203,6 +207,10 @@ const productsRouter = router({
         minimumStock: z.number().int().min(0).optional(),
         description: z.string().optional(),
         imageUrl: z.string().optional().nullable(),
+        weightGrams: z.number().int().positive().optional().nullable(),
+        lengthCm: z.number().int().positive().optional().nullable(),
+        widthCm: z.number().int().positive().optional().nullable(),
+        heightCm: z.number().int().positive().optional().nullable(),
       })
     )
     .mutation(async ({ input }) => {

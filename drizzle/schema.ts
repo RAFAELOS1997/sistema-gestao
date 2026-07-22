@@ -27,6 +27,12 @@ export const products = mysqlTable("products", {
   description: text("description"),
   imageUrl: mediumtext("imageUrl"), // mediumtext pra caber foto enviada do dispositivo (base64)
   isActive: int("isActive").default(1).notNull(), // 1 = ativo, 0 = inativo (soft delete)
+  // Peso e dimensões (Fase 1 do plano de expansão nacional) — base pra
+  // calcular frete por peso/CEP mais pra frente; opcional, não bloqueia nada.
+  weightGrams: int("weightGrams"),
+  lengthCm: int("lengthCm"),
+  widthCm: int("widthCm"),
+  heightCm: int("heightCm"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

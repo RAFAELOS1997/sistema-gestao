@@ -41,6 +41,10 @@ const emptyForm = {
   minimumStock: "",
   description: "",
   imageUrl: "" as string | null,
+  weightGrams: "",
+  lengthCm: "",
+  widthCm: "",
+  heightCm: "",
 };
 
 // Redimensiona/comprime a foto no navegador antes de enviar, pra não mandar
@@ -203,6 +207,10 @@ export default function Products() {
       minimumStock: product.minimumStock.toString(),
       description: product.description ?? "",
       imageUrl: product.imageUrl ?? "",
+      weightGrams: product.weightGrams?.toString() ?? "",
+      lengthCm: product.lengthCm?.toString() ?? "",
+      widthCm: product.widthCm?.toString() ?? "",
+      heightCm: product.heightCm?.toString() ?? "",
     });
     setOpen(true);
   };
@@ -246,14 +254,18 @@ export default function Products() {
     const salePrice = Math.round(parseFloat(formData.salePrice) * 100);
     const currentStock = parseInt(formData.currentStock);
     const minimumStock = parseInt(formData.minimumStock);
+    const weightGrams = formData.weightGrams.trim() ? parseInt(formData.weightGrams) : null;
+    const lengthCm = formData.lengthCm.trim() ? parseInt(formData.lengthCm) : null;
+    const widthCm = formData.widthCm.trim() ? parseInt(formData.widthCm) : null;
+    const heightCm = formData.heightCm.trim() ? parseInt(formData.heightCm) : null;
 
     try {
       const imageUrl = formData.imageUrl?.trim() ? formData.imageUrl.trim() : null;
       if (editingId) {
-        await updateMutation.mutateAsync({ id: editingId, name: formData.name, category: formData.category, costPrice, salePrice, currentStock, minimumStock, description: formData.description, imageUrl });
+        await updateMutation.mutateAsync({ id: editingId, name: formData.name, category: formData.category, costPrice, salePrice, currentStock, minimumStock, description: formData.description, imageUrl, weightGrams, lengthCm, widthCm, heightCm });
         toast.success("Produto atualizado com sucesso!");
       } else {
-        await createMutation.mutateAsync({ name: formData.name, category: formData.category, costPrice, salePrice, currentStock, minimumStock, description: formData.description, imageUrl });
+        await createMutation.mutateAsync({ name: formData.name, category: formData.category, costPrice, salePrice, currentStock, minimumStock, description: formData.description, imageUrl, weightGrams, lengthCm, widthCm, heightCm });
         toast.success("Produto criado com sucesso!");
       }
       setOpen(false);
@@ -464,6 +476,53 @@ export default function Products() {
                   placeholder="Descrição do produto"
                   className="bg-background border-border text-foreground mt-1"
                 />
+              </div>
+
+              <div>
+                <Label className="text-foreground text-sm">Peso e tamanho (opcional)</Label>
+                <p className="text-xs text-muted-foreground mb-1.5">Usado no futuro pra calcular frete com mais precisão — pode deixar em branco por enquanto.</p>
+                <div className="grid grid-cols-4 gap-2">
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Peso (g)</Label>
+                    <Input
+                      type="number" min="0"
+                      value={formData.weightGrams}
+                      onChange={(e) => setFormData({ ...formData, weightGrams: e.target.value })}
+                      placeholder="100"
+                      className="bg-background border-border text-foreground mt-1 h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Compr. (cm)</Label>
+                    <Input
+                      type="number" min="0"
+                      value={formData.lengthCm}
+                      onChange={(e) => setFormData({ ...formData, lengthCm: e.target.value })}
+                      placeholder="10"
+                      className="bg-background border-border text-foreground mt-1 h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Larg. (cm)</Label>
+                    <Input
+                      type="number" min="0"
+                      value={formData.widthCm}
+                      onChange={(e) => setFormData({ ...formData, widthCm: e.target.value })}
+                      placeholder="10"
+                      className="bg-background border-border text-foreground mt-1 h-9"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Alt. (cm)</Label>
+                    <Input
+                      type="number" min="0"
+                      value={formData.heightCm}
+                      onChange={(e) => setFormData({ ...formData, heightCm: e.target.value })}
+                      placeholder="10"
+                      className="bg-background border-border text-foreground mt-1 h-9"
+                    />
+                  </div>
+                </div>
               </div>
 
               <Button
