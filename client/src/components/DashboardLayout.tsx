@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/sidebar";
 import { getLoginUrl } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
-import { LayoutDashboard, LogOut, Package, PanelLeft, ShoppingCart, ShoppingBag, BarChart3, Settings, Truck, Users as UsersIcon, Receipt, ClipboardCheck, Sparkles, Handshake, Wallet, ClipboardList, Store, UserCircle } from "lucide-react";
+import { LayoutDashboard, LogOut, Package, PanelLeft, ShoppingCart, ShoppingBag, BarChart3, Settings, Truck, Users as UsersIcon, Receipt, ClipboardCheck, Sparkles, Handshake, Wallet, ClipboardList, Store, UserCircle, Bot } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
@@ -37,6 +37,7 @@ const menuItems = [
   { icon: Receipt, label: "Recibos", path: "/receipts" },
   { icon: Truck, label: "Fornecedores", path: "/suppliers" },
   { icon: Sparkles, label: "O Oráculo", path: "/oraculo" },
+  { icon: Bot, label: "Assistente de IA", path: "/assistente-ia" },
   { icon: Handshake, label: "Terreiros Parceiros", path: "/parceiros-terreiros" },
   { icon: ClipboardList, label: "Pedidos dos Parceiros", path: "/pedidos-parceiros" },
   { icon: Store, label: "Pedidos do Site", path: "/pedidos-site" },

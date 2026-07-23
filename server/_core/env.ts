@@ -11,4 +11,8 @@ export const ENV = {
   // gratuito de criar no Google Cloud e sem precisar de cartão. Enquanto não
   // for configurado, o botão "Entrar com Google" some sozinho no site.
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  // Assistente IA do painel admin (Google Gemini, gratuito de gerar em
+  // aistudio.google.com) — lê e altera dados reais do sistema a pedido do
+  // Rafael. Enquanto não configurado, a tela avisa e não deixa conversar.
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
 };

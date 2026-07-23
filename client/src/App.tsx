@@ -30,6 +30,7 @@ import { PublicCartProvider } from "./contexts/PublicCartContext";
 import { ProntaEntregaCartProvider } from "./contexts/ProntaEntregaCartContext";
 import PriceReview from "./pages/PriceReview";
 import Oraculo from "./pages/Oraculo";
+import AiAssistant from "./pages/AiAssistant";
 import AuditPedido7335 from "./pages/AuditPedido7335";
 import Products from "./pages/Products";
 import Purchases from "./pages/Purchases";
@@ -85,6 +86,11 @@ function Router() {
       <Route path="/oraculo">
         <DashboardLayout>
           <Oraculo />
+        </DashboardLayout>
+      </Route>
+      <Route path="/assistente-ia">
+        <DashboardLayout>
+          <AiAssistant />
         </DashboardLayout>
       </Route>
       <Route path="/conferencia-pedido-7335">

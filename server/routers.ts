@@ -9,6 +9,7 @@ import { hashPassword, verifyPassword } from "./_core/password";
 import { sdk } from "./_core/sdk";
 import { fetchSupplierProductStatus, fetchSupplierProductImage, fetchSupplierListingPage, searchSupplierProducts } from "./_core/supplierScraper";
 import { fetchCrystalsListingPage, fetchCrystalsProductStatus } from "./_core/crystalsScraper";
+import { runAssistantTurn, executeConfirmedAction, type AssistantMessage } from "./_core/geminiAssistant";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router, terreiroProcedure, customerProcedure } from "./_core/trpc";
 import { CUSTOMER_COOKIE_NAME, signCustomerSession } from "./_core/customerAuth";
@@ -2995,6 +2996,35 @@ const partnerOrdersRouter = router({
 
 // ─── App Router ───────────────────────────────────────────────────────────────
 
+// Assistente de IA do painel admin (Google Gemini + Function Calling) —
+// lê e altera dados reais do sistema a pedido do usuário logado. Autorizado
+// explicitamente pelo Rafael, ciente de que as alterações são diretas (sem
+// confirmação extra) — por isso toda ação de escrita grava em auditLog.
+const aiAssistantRouter = router({
+  config: protectedProcedure.query(() => ({ configured: !!ENV.geminiApiKey })),
+
+  chat: protectedProcedure
+    .input(
+      z.object({
+        message: z.string().min(1).max(2000),
+        history: z
+          .array(z.object({ role: z.enum(["user", "model"]), text: z.string() }))
+          .max(40)
+          .default([]),
+      })
+    )
+    .mutation(async ({ input, ctx }) => {
+      const result = await runAssistantTurn(input.history as AssistantMessage[], input.message, ctx.user.id);
+      return result;
+    }),
+
+  // Só aqui uma proposta de alteração da IA vira gravação de verdade —
+  // exige clique explícito do usuário na tela.
+  confirmAction: protectedProcedure
+    .input(z.object({ tool: z.string(), args: z.record(z.string(), z.any()) }))
+    .mutation(({ input, ctx }) => executeConfirmedAction(input.tool, input.args, ctx.user.id)),
+});
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -3067,6 +3097,7 @@ export const appRouter = router({
   settings: settingsRouter,
   suppliers: suppliersRouter,
   supplierCatalog: supplierCatalogRouter,
+  aiAssistant: aiAssistantRouter,
   users: usersRouter,
   customers: customersRouter,
   receipts: receiptsRouter,
