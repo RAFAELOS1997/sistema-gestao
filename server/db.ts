@@ -2331,6 +2331,40 @@ export async function listCustomerOrders(customerId: number) {
   }));
 }
 
+// Lista pro admin ver quem se cadastrou na loja (tela "Clientes") — nunca
+// devolve passwordHash/googleId, só o necessário pra identificar e contatar.
+export async function listCustomers() {
+  const db = await getDb();
+  if (!db) return [];
+  const all = await db
+    .select({
+      id: customers.id,
+      name: customers.name,
+      email: customers.email,
+      phone: customers.phone,
+      shippingCity: customers.shippingCity,
+      shippingState: customers.shippingState,
+      hasPassword: sql<number>`(${customers.passwordHash} IS NOT NULL)`,
+      hasGoogle: sql<number>`(${customers.googleId} IS NOT NULL)`,
+      isActive: customers.isActive,
+      createdAt: customers.createdAt,
+      lastSignedIn: customers.lastSignedIn,
+    })
+    .from(customers)
+    .orderBy(desc(customers.createdAt));
+  const orders = await db.select({ id: publicOrders.id, customerId: publicOrders.customerId, subtotal: publicOrders.subtotal }).from(publicOrders);
+  return all.map((c) => {
+    const customerOrders = orders.filter((o) => o.customerId === c.id);
+    return {
+      ...c,
+      hasPassword: !!c.hasPassword,
+      hasGoogle: !!c.hasGoogle,
+      orderCount: customerOrders.length,
+      totalSpent: customerOrders.reduce((sum, o) => sum + o.subtotal, 0),
+    };
+  });
+}
+
 export async function updatePublicOrderTracking(id: number, trackingCode: string | null, carrier: string | null) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2370,11 +2404,14 @@ export async function listAllPublicOrders() {
       referredByTerreiroId: publicOrders.referredByTerreiroId,
       referredByTerreiroName: terreiros.name,
       discountCents: publicOrders.discountCents,
+      customerId: publicOrders.customerId,
+      customerEmail: customers.email,
       createdAt: publicOrders.createdAt,
       updatedAt: publicOrders.updatedAt,
     })
     .from(publicOrders)
     .leftJoin(terreiros, eq(terreiros.id, publicOrders.referredByTerreiroId))
+    .leftJoin(customers, eq(customers.id, publicOrders.customerId))
     .orderBy(desc(publicOrders.createdAt));
   const items = await db.select().from(publicOrderItems);
   const catalogStock = await db.select({ id: supplierCatalog.id, stockStatus: supplierCatalog.stockStatus }).from(supplierCatalog);

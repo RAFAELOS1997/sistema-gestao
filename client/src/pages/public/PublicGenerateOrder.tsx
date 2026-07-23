@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,7 @@ export default function PublicGenerateOrder() {
   const [couponCode, setCouponCode] = useState("");
   const [confirmedOrder, setConfirmedOrder] = useState<{ id: number; subtotal: number; shippingCents: number; discountCents: number } | null>(null);
 
+  const accountQuery = trpc.account.me.useQuery();
   const catalogQuery = trpc.publicStore.orderCatalog.catalog.useQuery();
   const stockQuery = trpc.publicStore.orderCatalog.stock.useQuery();
   const minimumQuery = trpc.publicStore.orders.minimumCents.useQuery();
@@ -51,6 +52,27 @@ export default function PublicGenerateOrder() {
     },
     onError: (error) => toast.error(error.message),
   });
+
+  // Se o cliente está logado, preenche os dados dele sozinho (só quando o
+  // campo ainda está vazio, pra não sobrescrever o que ele já digitou).
+  useEffect(() => {
+    const customer = accountQuery.data;
+    if (!customer) return;
+    if (!customerName) setCustomerName(customer.name);
+    if (!customerPhone && customer.phone) setCustomerPhone(customer.phone);
+    if (!isAddressComplete(address) && customer.shippingZipCode) {
+      setAddress({
+        zipCode: customer.shippingZipCode ?? "",
+        street: customer.shippingStreet ?? "",
+        number: customer.shippingNumber ?? "",
+        complement: customer.shippingComplement ?? "",
+        neighborhood: customer.shippingNeighborhood ?? "",
+        city: customer.shippingCity ?? "",
+        state: customer.shippingState ?? "",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountQuery.data]);
 
   const categories = useMemo(() => Array.from(new Set(items.map((p) => p.category))), [items]);
 

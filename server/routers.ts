@@ -126,6 +126,7 @@ import {
   updateCustomer,
   touchCustomerLastSignedIn,
   listCustomerOrders,
+  listCustomers,
   fulfillPublicOrderForCharge,
   recalculatePartnerTierByOrders,
   ensureMinimumBronzeForConsignment,
@@ -1554,6 +1555,13 @@ const supplierCatalogRouter = router({
 });
 
 // ─── Users Router ────────────────────────────────────────────────────────────
+
+// Clientes cadastrados na loja pública (área do usuário) — visão do admin,
+// só pra consulta/contato, nunca edita nada aqui (o cliente cuida da
+// própria conta em /conta).
+const customersRouter = router({
+  list: protectedProcedure.query(() => listCustomers()),
+});
 
 const usersRouter = router({
   list: protectedProcedure.query(async () => (await listUsers()).map(stripPasswordHash)),
@@ -3042,6 +3050,7 @@ export const appRouter = router({
   suppliers: suppliersRouter,
   supplierCatalog: supplierCatalogRouter,
   users: usersRouter,
+  customers: customersRouter,
   receipts: receiptsRouter,
   terreiros: terreirosRouter,
   portal: portalRouter,

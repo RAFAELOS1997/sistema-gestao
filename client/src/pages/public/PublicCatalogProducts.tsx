@@ -28,6 +28,7 @@ export default function PublicCatalogProducts() {
   const [paid, setPaid] = useState(false);
 
   const utils = trpc.useUtils();
+  const accountQuery = trpc.account.me.useQuery();
   const productsQuery = trpc.publicStore.products.list.useQuery();
   const products = productsQuery.data ?? [];
   const zipDigits = address.zipCode.replace(/\D/g, "");
@@ -59,6 +60,27 @@ export default function PublicCatalogProducts() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusQuery.data?.status]);
+
+  // Se o cliente está logado, preenche os dados dele sozinho (só quando o
+  // campo ainda está vazio, pra não sobrescrever o que ele já digitou).
+  useEffect(() => {
+    const customer = accountQuery.data;
+    if (!customer) return;
+    if (!customerName) setCustomerName(customer.name);
+    if (!customerPhone && customer.phone) setCustomerPhone(customer.phone);
+    if (!isAddressComplete(address) && customer.shippingZipCode) {
+      setAddress({
+        zipCode: customer.shippingZipCode ?? "",
+        street: customer.shippingStreet ?? "",
+        number: customer.shippingNumber ?? "",
+        complement: customer.shippingComplement ?? "",
+        neighborhood: customer.shippingNeighborhood ?? "",
+        city: customer.shippingCity ?? "",
+        state: customer.shippingState ?? "",
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [accountQuery.data]);
 
   const categories = useMemo(() => Array.from(new Set(products.map((p) => p.category))), [products]);
 

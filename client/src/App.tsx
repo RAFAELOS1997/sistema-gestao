@@ -39,6 +39,7 @@ import SettingsPage from "./pages/Settings";
 import PaymentSettings from "./pages/PaymentSettings";
 import Suppliers from "./pages/Suppliers";
 import { Users } from "./pages/Users";
+import Customers from "./pages/Customers";
 import Receipts from "./pages/Receipts";
 
 function Router() {
@@ -109,6 +110,11 @@ function Router() {
       <Route path="/users">
         <DashboardLayout>
           <Users />
+        </DashboardLayout>
+      </Route>
+      <Route path="/clientes">
+        <DashboardLayout>
+          <Customers />
         </DashboardLayout>
       </Route>
       <Route path="/parceiros-terreiros">
