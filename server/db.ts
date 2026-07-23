@@ -787,10 +787,117 @@ export async function createSale(data: Omit<InsertSale, "id" | "createdAt">) {
     .where(eq(products.id, data.productId));
 }
 
-export async function listSales(limit = 50) {
+export async function createSaleBatch(data: {
+  items: Array<{
+    productId: number;
+    quantity: number;
+    unitPrice: number;
+  }>;
+  channel: "fisico" | "instagram" | "terreiro";
+  terreiroId?: number | null;
+  saleDate: Date;
+  receipt?: {
+    subtotal: number;
+    discount: number;
+    total: number;
+    paymentMethod: string;
+    notes?: string;
+  };
+}): Promise<{ success: boolean; receiptNumber?: number }> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  // 1. Validação prévia de estoque para TODOS os itens
+  const receiptItemsArray: Array<{ name: string; quantity: number; unitPrice: number; total: number }> = [];
+
+  for (const item of data.items) {
+    const productList = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
+    if (!productList.length) {
+      throw new Error(`Produto #${item.productId} não encontrado.`);
+    }
+    const product = productList[0];
+    if (product.currentStock < item.quantity) {
+      throw new Error(`Estoque insuficiente para ${product.name}. Disponível: ${product.currentStock}`);
+    }
+    receiptItemsArray.push({
+      name: product.name,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      total: item.unitPrice * item.quantity,
+    });
+  }
+
+  if (data.channel === "terreiro" && !data.terreiroId) {
+    throw new Error("Selecione o parceiro para registrar essa venda.");
+  }
+
+  // 2. Registro em lote das vendas e dedução de estoque
+  for (let i = 0; i < data.items.length; i++) {
+    const item = data.items[i];
+    const productList = await db.select().from(products).where(eq(products.id, item.productId)).limit(1);
+    const product = productList[0];
+
+    const totalPrice = item.unitPrice * item.quantity;
+    const profit = (item.unitPrice - product.costPrice) * item.quantity;
+
+    await db.insert(sales).values({
+      productId: item.productId,
+      quantity: item.quantity,
+      unitPrice: item.unitPrice,
+      totalPrice,
+      profit,
+      channel: data.channel,
+      terreiroId: data.channel === "terreiro" ? data.terreiroId! : null,
+      saleDate: data.saleDate,
+    });
+
+    await db
+      .update(products)
+      .set({ currentStock: sql`${products.currentStock} - ${item.quantity}` })
+      .where(eq(products.id, item.productId));
+  }
+
+  // 3. Criação de recibo integrada (se solicitado)
+  let createdReceiptNumber: number | undefined;
+  if (data.receipt) {
+    const receiptNumber = await getNextReceiptNumber();
+    await db.insert(receipts).values({
+      receiptNumber,
+      subtotal: data.receipt.subtotal,
+      discount: data.receipt.discount,
+      total: data.receipt.total,
+      paymentMethod: data.receipt.paymentMethod,
+      notes: data.receipt.notes || null,
+      items: JSON.stringify(receiptItemsArray),
+    });
+    createdReceiptNumber = receiptNumber;
+  }
+
+  return { success: true, receiptNumber: createdReceiptNumber };
+}
+
+export async function listSales(options?: number | { limit?: number; startDate?: Date; endDate?: Date }) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(sales).orderBy(sql`${sales.saleDate} DESC`).limit(limit);
+
+  if (typeof options === "number") {
+    return db.select().from(sales).orderBy(sql`${sales.saleDate} DESC`).limit(options);
+  }
+
+  const { limit, startDate, endDate } = options ?? {};
+  const conditions = [];
+  if (startDate) conditions.push(gte(sales.saleDate, startDate));
+  if (endDate) conditions.push(lte(sales.saleDate, endDate));
+
+  if (conditions.length > 0) {
+    const q = db.select().from(sales).where(and(...conditions)).orderBy(sql`${sales.saleDate} DESC`);
+    if (limit) return q.limit(limit);
+    return q;
+  }
+
+  const q = db.select().from(sales).orderBy(sql`${sales.saleDate} DESC`);
+  if (limit) return q.limit(limit);
+  return q;
 }
 
 // Total gasto por parceiro (soma das vendas canal "terreiro" vinculadas a

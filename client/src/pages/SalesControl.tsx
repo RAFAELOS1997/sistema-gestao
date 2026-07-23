@@ -44,7 +44,18 @@ export default function SalesControl() {
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const productsQuery = trpc.products.list.useQuery();
-  const salesQuery = trpc.sales.list.useQuery({ limit: 200 });
+  const salesQuery = trpc.sales.list.useQuery({
+    startDate: React.useMemo(() => {
+      const d = new Date(startDate);
+      d.setHours(0, 0, 0, 0);
+      return d;
+    }, [startDate]),
+    endDate: React.useMemo(() => {
+      const d = new Date(endDate);
+      d.setHours(23, 59, 59, 999);
+      return d;
+    }, [endDate]),
+  });
 
   // Filtrar vendas por período e categoria
   const filteredSales = React.useMemo(() => {

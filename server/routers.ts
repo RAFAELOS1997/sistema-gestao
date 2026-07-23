@@ -22,6 +22,7 @@ import { notifyPartnerOrder, notifyPublicOrder, notifyConsignmentRequest, notify
 import {
   createProduct,
   createSale,
+  createSaleBatch,
   createPurchase,
   updatePurchase,
   ensureProductImageColumn,
@@ -872,8 +873,22 @@ Se não conseguir determinar um campo, use null.`,
 
 const salesRouter = router({
   list: protectedProcedure
-    .input(z.object({ limit: z.number().int().min(1).max(200).optional() }))
-    .query(({ input }) => listSales(input.limit ?? 50)),
+    .input(
+      z
+        .object({
+          limit: z.number().int().min(1).max(10000).optional(),
+          startDate: z.date().optional(),
+          endDate: z.date().optional(),
+        })
+        .optional()
+    )
+    .query(({ input }) =>
+      listSales({
+        limit: input?.limit,
+        startDate: input?.startDate,
+        endDate: input?.endDate,
+      })
+    ),
 
   create: protectedProcedure
     .input(
@@ -909,6 +924,34 @@ const salesRouter = router({
       });
       return { success: true };
     }),
+
+  createBatch: protectedProcedure
+    .input(
+      z.object({
+        items: z
+          .array(
+            z.object({
+              productId: z.number().int().positive(),
+              quantity: z.number().int().positive(),
+              unitPrice: z.number().int().positive(),
+            })
+          )
+          .min(1),
+        channel: z.enum(["fisico", "instagram", "terreiro"]),
+        terreiroId: z.number().int().positive().optional().nullable(),
+        saleDate: z.date(),
+        receipt: z
+          .object({
+            subtotal: z.number().int().nonnegative(),
+            discount: z.number().int().nonnegative(),
+            total: z.number().int().positive(),
+            paymentMethod: z.string().min(1),
+            notes: z.string().optional(),
+          })
+          .optional(),
+      })
+    )
+    .mutation(({ input }) => createSaleBatch(input)),
 });
 
 // ─── Analytics Router ─────────────────────────────────────────────────────────

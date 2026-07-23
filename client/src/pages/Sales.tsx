@@ -75,6 +75,7 @@ export default function Sales() {
 
   const productsQuery = trpc.products.list.useQuery();
   const createSaleMutation = trpc.sales.create.useMutation();
+  const createSaleBatchMutation = trpc.sales.createBatch.useMutation();
   const createReceiptMutation = trpc.receipts.create.useMutation();
   const terreirosQuery = trpc.terreiros.list.useQuery(undefined, { enabled: channel === "terreiro" });
   const partnerTiersQuery = trpc.partnerTiers.list.useQuery(undefined, { enabled: channel === "terreiro" });
@@ -246,45 +247,35 @@ export default function Sales() {
     return true;
   };
 
-  // Grava as vendas + recibo (usado tanto no fluxo normal quanto depois que
-  // uma cobrança InfinitePay é confirmada como paga).
+  // Grava as vendas + recibo de forma atômica em lote.
   const finalizeSaleRecords = async () => {
     const { subtotal, discount, total } = cartTotals;
-    // O desconto do carrinho (manual ou do plano do parceiro) só aparecia no
-    // recibo — a venda registrada (que alimenta Dashboard/Controle de
-    // Vendas) ia com o preço cheio, inflando receita e lucro. Aqui o
-    // desconto é distribuído proporcionalmente pra cada item, então o
-    // preço unitário registrado é o que realmente foi cobrado.
     const discountRatio = subtotal > 0 ? discount / subtotal : 0;
 
-    // Registrar cada item do carrinho como uma venda separada
-    for (const item of cart) {
-      const effectiveUnitPrice = discountRatio > 0
-        ? Math.max(1, Math.round(item.unitPrice * (1 - discountRatio)))
-        : item.unitPrice;
-      await createSaleMutation.mutateAsync({
+    const items = cart.map((item) => {
+      const effectiveUnitPrice =
+        discountRatio > 0
+          ? Math.max(1, Math.round(item.unitPrice * (1 - discountRatio)))
+          : item.unitPrice;
+      return {
         productId: item.productId,
         quantity: item.quantity,
         unitPrice: effectiveUnitPrice,
-        channel,
-        terreiroId: channel === "terreiro" && selectedTerreiroId ? selectedTerreiroId : undefined,
-        saleDate: new Date(),
-      });
-    }
+      };
+    });
 
-    // Criar recibo no banco com numeração sequencial
-    const receiptResult = await createReceiptMutation.mutateAsync({
-      subtotal,
-      discount,
-      total,
-      paymentMethod,
-      notes: notes || undefined,
-      items: JSON.stringify(cart.map((item) => ({
-        name: item.name,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        total: item.total,
-      }))),
+    const res = await createSaleBatchMutation.mutateAsync({
+      items,
+      channel,
+      terreiroId: channel === "terreiro" && selectedTerreiroId ? selectedTerreiroId : undefined,
+      saleDate: new Date(),
+      receipt: {
+        subtotal,
+        discount,
+        total,
+        paymentMethod,
+        notes: notes || undefined,
+      },
     });
 
     setLastSaleData({
@@ -294,7 +285,7 @@ export default function Sales() {
       total,
       paymentMethod,
       notes,
-      receiptNumber: receiptResult.receiptNumber,
+      receiptNumber: res.receiptNumber ?? 0,
     });
 
     setCart([]);

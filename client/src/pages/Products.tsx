@@ -13,7 +13,7 @@ import { Switch } from "@/components/ui/switch";
 import { Edit2, Package, Plus, Trash2, Eye, EyeOff, Search, ImageDown } from "lucide-react";
 import { useMemo } from "react";
 import { toast } from "sonner";
-import { ZoomableImage } from "@/components/ZoomableImage";
+import { resizeImageFile } from "@/lib/imageResizer";
 
 const CATEGORIES = ["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"] as const;
 const CATEGORY_LABELS: Record<string, string> = {
@@ -47,32 +47,7 @@ const emptyForm = {
   heightCm: "",
 };
 
-// Redimensiona/comprime a foto no navegador antes de enviar, pra não mandar
-// um arquivo gigante de celular direto pro banco.
-function resizeImageFile(file: File, maxDimension = 800, quality = 0.75): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error("Erro ao ler o arquivo"));
-    reader.onload = () => {
-      const img = new Image();
-      img.onerror = () => reject(new Error("Arquivo não é uma imagem válida"));
-      img.onload = () => {
-        const scale = Math.min(1, maxDimension / Math.max(img.width, img.height));
-        const width = Math.round(img.width * scale);
-        const height = Math.round(img.height * scale);
-        const canvas = document.createElement("canvas");
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) { reject(new Error("Não foi possível processar a imagem")); return; }
-        ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL("image/jpeg", quality));
-      };
-      img.src = reader.result as string;
-    };
-    reader.readAsDataURL(file);
-  });
-}
+
 
 export default function Products() {
   const [open, setOpen] = useState(false);
