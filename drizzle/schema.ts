@@ -258,6 +258,7 @@ export const supplierCatalog = mysqlTable("supplierCatalog", {
   category: mysqlEnum("category", ["guias", "pulseiras", "velas", "incensos", "ervas", "imagens", "ferramentas", "vestuario", "livros", "pedras", "outros"]).notNull(),
   sourceSlug: varchar("sourceSlug", { length: 255 }).notNull(), // identificador único do produto no site do fornecedor
   sourceUrl: text("sourceUrl").notNull(),
+  sourceKey: varchar("sourceKey", { length: 40 }).notNull().default("atacado_umbanda"), // qual fornecedor/scraper — distingue catálogos de fornecedores diferentes na mesma tabela
   imageUrl: text("imageUrl"),
   price: int("price").notNull(), // preço de atacado em centavos
   suggestedSalePrice: int("suggestedSalePrice"), // sugestão calculada, em centavos

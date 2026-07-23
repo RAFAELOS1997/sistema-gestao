@@ -6,9 +6,20 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { trpc } from "@/lib/trpc";
-import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch, PackagePlus, Check, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, ExternalLink, Sparkles, Search, Clock, PackageSearch, PackagePlus, Check, Download, ChevronLeft, ChevronRight, LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { ZoomableImage } from "@/components/ZoomableImage";
+
+export type SupplierCatalogSource = { path: string; category: string; label: string };
+
+export type SupplierCatalogConfig = {
+  supplierId: number;
+  sourceKey: "atacado_umbanda" | "cristais_curvelo";
+  title: string;
+  subtitle: string;
+  icon: LucideIcon;
+  importSources: SupplierCatalogSource[];
+};
 
 const CATEGORY_LABELS: Record<string, string> = {
   guias: "Guias",
@@ -38,8 +49,7 @@ const centsToBRL = (cents: number) => `R$ ${(cents / 100).toFixed(2)}`;
 // (verificado no site real), então TODA categoria do menu do site precisa
 // estar nesta lista. Produtos repetidos entre categorias são ignorados pelo
 // slug, então sobreposição é inofensiva.
-const IMPORT_SUPPLIER_ID = 1;
-const IMPORT_SOURCES: { path: string; category: string; label: string }[] = [
+const ORACULO_IMPORT_SOURCES: SupplierCatalogSource[] = [
   { path: "guias", category: "guias", label: "Guias" },
   { path: "guia-micanguinha", category: "guias", label: "Guias miçanguinha" },
   { path: "guias-de-cristal", category: "guias", label: "Guias de cristal" },
@@ -140,6 +150,15 @@ const IMPORT_SOURCES: { path: string; category: string; label: string }[] = [
   { path: "diversos", category: "outros", label: "Demais produtos" },
 ];
 
+const ORACULO_CONFIG: SupplierCatalogConfig = {
+  supplierId: 1,
+  sourceKey: "atacado_umbanda",
+  title: "O Oráculo",
+  subtitle: "Produtos, preços e estoque dos seus fornecedores, tudo num só lugar",
+  icon: Sparkles,
+  importSources: ORACULO_IMPORT_SOURCES,
+};
+
 const timeAgo = (dateStr: string | Date) => {
   const date = new Date(dateStr);
   const diffMs = Date.now() - date.getTime();
@@ -152,7 +171,8 @@ const timeAgo = (dateStr: string | Date) => {
   return `há ${diffD}d`;
 };
 
-export default function SupplierCatalog() {
+export default function SupplierCatalog({ config }: { config?: SupplierCatalogConfig }) {
+  const cfg = config ?? ORACULO_CONFIG;
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("todas");
   const [sortBy, setSortBy] = useState<string>("nome");
@@ -167,7 +187,7 @@ export default function SupplierCatalog() {
   const [currentPage, setCurrentPage] = useState(1);
 
   const utils = trpc.useUtils();
-  const { data: items, isLoading } = trpc.supplierCatalog.list.useQuery({});
+  const { data: items, isLoading } = trpc.supplierCatalog.list.useQuery({ supplierId: cfg.supplierId });
   const { data: myProducts } = trpc.products.list.useQuery();
   const refreshMutation = trpc.supplierCatalog.refresh.useMutation();
   const updatePriceMutation = trpc.supplierCatalog.updateSuggestedPrice.useMutation();
@@ -265,20 +285,21 @@ export default function SupplierCatalog() {
 
   const handleImportAll = async () => {
     if (!confirm(
-      "Isso vai buscar TODOS os produtos do site do fornecedor e adicionar os que ainda não estão no Oráculo. Pode levar alguns minutos. Continuar?"
+      `Isso vai buscar TODOS os produtos do site do fornecedor e adicionar os que ainda não estão em "${cfg.title}". Pode levar alguns minutos. Continuar?`
     )) return;
 
     setImporting(true);
     let totalInserted = 0;
     try {
-      for (let i = 0; i < IMPORT_SOURCES.length; i++) {
-        const source = IMPORT_SOURCES[i];
-        setImportProgress(`${source.label} (${i + 1}/${IMPORT_SOURCES.length})`);
+      for (let i = 0; i < cfg.importSources.length; i++) {
+        const source = cfg.importSources[i];
+        setImportProgress(`${source.label} (${i + 1}/${cfg.importSources.length})`);
         let page: number | null = 1;
         while (page !== null) {
           const result: { found: number; inserted: number; nextPage: number | null } =
             await importSiteMutation.mutateAsync({
-              supplierId: IMPORT_SUPPLIER_ID,
+              supplierId: cfg.supplierId,
+              sourceKey: cfg.sourceKey,
               categoryPath: source.path,
               myCategory: source.category as any,
               startPage: page,
@@ -352,14 +373,14 @@ export default function SupplierCatalog() {
     <div className="space-y-5">
       <div className="flex items-center gap-3">
         <div className="h-11 w-11 rounded-xl bg-accent/15 border border-accent/30 flex items-center justify-center shrink-0">
-          <Sparkles className="h-6 w-6 text-accent" />
+          <cfg.icon className="h-6 w-6 text-accent" />
         </div>
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">
-            O Oráculo
+            {cfg.title}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Produtos, preços e estoque dos seus fornecedores, tudo num só lugar
+            {cfg.subtitle}
           </p>
         </div>
       </div>

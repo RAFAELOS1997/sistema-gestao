@@ -8,6 +8,7 @@ import { invokeLLM } from "./_core/llm";
 import { hashPassword, verifyPassword } from "./_core/password";
 import { sdk } from "./_core/sdk";
 import { fetchSupplierProductStatus, fetchSupplierProductImage, fetchSupplierListingPage, searchSupplierProducts } from "./_core/supplierScraper";
+import { fetchCrystalsListingPage, fetchCrystalsProductStatus } from "./_core/crystalsScraper";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router, terreiroProcedure, customerProcedure } from "./_core/trpc";
 import { CUSTOMER_COOKIE_NAME, signCustomerSession } from "./_core/customerAuth";
@@ -68,6 +69,7 @@ import {
   createSupplierCatalogBatch,
   updateSupplierCatalogItem,
   deleteSupplierCatalogItem,
+  ensureCrystalsSupplier,
   listTerreiros,
   getTerreiroById,
   getTerreiroByUsername,
@@ -1362,15 +1364,22 @@ const shippingAddressSchema = z.object({
   state: z.string().length(2),
 });
 
+const SOURCE_KEY = z.enum(["atacado_umbanda", "cristais_curvelo"]);
+
 const supplierCatalogRouter = router({
   list: protectedProcedure
     .input(z.object({ supplierId: z.number().int().positive().optional() }))
     .query(({ input }) => listSupplierCatalog(input.supplierId)),
 
+  // Id do fornecedor "Sabedoria dos Cristais" — criado sozinho na primeira
+  // vez que alguém abre a tela (idempotente, nunca duplica).
+  crystalsSupplierId: protectedProcedure.query(() => ensureCrystalsSupplier()),
+
   createBatch: protectedProcedure
     .input(
       z.object({
         supplierId: z.number().int().positive(),
+        sourceKey: SOURCE_KEY.default("atacado_umbanda"),
         items: z
           .array(
             z.object({
@@ -1389,6 +1398,7 @@ const supplierCatalogRouter = router({
       createSupplierCatalogBatch(
         input.items.map((item) => ({
           supplierId: input.supplierId,
+          sourceKey: input.sourceKey,
           name: item.name,
           category: item.category,
           sourceSlug: item.sourceSlug,
@@ -1406,7 +1416,10 @@ const supplierCatalogRouter = router({
       const item = await getSupplierCatalogItem(input.id);
       if (!item) throw new TRPCError({ code: "NOT_FOUND", message: "Item não encontrado" });
 
-      const status = await fetchSupplierProductStatus(item.sourceUrl);
+      const status =
+        item.sourceKey === "cristais_curvelo"
+          ? await fetchCrystalsProductStatus(item.sourceUrl)
+          : await fetchSupplierProductStatus(item.sourceUrl);
       const updates: Parameters<typeof updateSupplierCatalogItem>[1] = {
         stockStatus: status.stockStatus,
         lastCheckedAt: new Date(),
@@ -1427,6 +1440,7 @@ const supplierCatalogRouter = router({
     .input(
       z.object({
         supplierId: z.number().int().positive(),
+        sourceKey: SOURCE_KEY.default("atacado_umbanda"),
         categoryPath: z.string().min(1),
         myCategory: CATALOG_CATEGORY,
         startPage: z.number().int().min(1).default(1),
@@ -1442,7 +1456,10 @@ const supplierCatalogRouter = router({
       let nextPage: number | null = input.startPage;
 
       for (let i = 0; i < MAX_PAGES_PER_CALL && nextPage; i++) {
-        const { items, hasNext } = await fetchSupplierListingPage(input.categoryPath, nextPage);
+        const { items, hasNext } =
+          input.sourceKey === "cristais_curvelo"
+            ? await fetchCrystalsListingPage(input.categoryPath, nextPage)
+            : await fetchSupplierListingPage(input.categoryPath, nextPage);
         if (items.length === 0) {
           nextPage = null;
           break;
@@ -1455,10 +1472,11 @@ const supplierCatalogRouter = router({
           await createSupplierCatalogBatch(
             fresh.map((item) => ({
               supplierId: input.supplierId,
+              sourceKey: input.sourceKey,
               name: item.name,
               category: input.myCategory,
               sourceSlug: item.slug,
-              sourceUrl: "https://www.atacadodeumbanda.com.br/" + item.slug,
+              sourceUrl: (item as { sourceUrl?: string }).sourceUrl ?? "https://www.atacadodeumbanda.com.br/" + item.slug,
               imageUrl: item.imageUrl,
               // Produto indisponível não mostra preço na listagem — entra com
               // preço zerado e sem sugestão; o botão "Atualizar" (ou uma nova
@@ -1510,7 +1528,7 @@ const supplierCatalogRouter = router({
         salePrice,
         currentStock: 0,
         minimumStock: 5,
-        description: `Importado do Oráculo — ${item.sourceUrl}`,
+        description: `Importado (${item.sourceKey === "cristais_curvelo" ? "Sabedoria dos Cristais" : "Oráculo"}) — ${item.sourceUrl}`,
       });
       const productId = (created as any)[0]?.insertId || (created as any).insertId;
 

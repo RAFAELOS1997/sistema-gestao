@@ -1,0 +1,1 @@
+ALTER TABLE `supplierCatalog` ADD `sourceKey` varchar(40) DEFAULT 'atacado_umbanda' NOT NULL;

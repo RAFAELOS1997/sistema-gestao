@@ -744,6 +744,20 @@ export async function runStartupMigrations() {
     if (!isDupColumn(error)) console.error("[migrations] publicOrders.customerId:", error);
   }
 
+  // Segundo fornecedor no catálogo (Sabedoria dos Cristais) — sourceKey
+  // distingue de qual site/scraper cada item veio, já que os dois
+  // fornecedores compartilham a mesma tabela supplierCatalog.
+  try {
+    await db.execute(sql`ALTER TABLE supplierCatalog ADD COLUMN sourceKey varchar(40) NOT NULL DEFAULT 'atacado_umbanda'`);
+  } catch (error: any) {
+    if (!isDupColumn(error)) console.error("[migrations] supplierCatalog.sourceKey:", error);
+  }
+  try {
+    await ensureCrystalsSupplier();
+  } catch (error: any) {
+    console.error("[migrations] ensureCrystalsSupplier:", error);
+  }
+
   console.log("[migrations] Verificação de schema concluída.");
 }
 
@@ -1074,6 +1088,26 @@ export async function deleteSupplier(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return await db.update(suppliers).set({ isActive: 0 }).where(eq(suppliers.id, id));
+}
+
+const CRYSTALS_SUPPLIER_NAME = "Distribuidora CristaisdeCurvelo";
+
+// Cria (uma vez só) o cadastro de fornecedor pro catálogo "Sabedoria dos
+// Cristais" e devolve o id — como o id é auto-incremento e não dá pra
+// prever, o catálogo sempre resolve o id por aqui em vez de um número fixo.
+export async function ensureCrystalsSupplier(): Promise<number | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const existing = await db.select().from(suppliers).where(eq(suppliers.name, CRYSTALS_SUPPLIER_NAME)).limit(1);
+  if (existing.length > 0) return existing[0].id;
+  const result = await db.insert(suppliers).values({
+    name: CRYSTALS_SUPPLIER_NAME,
+    email: "cristaisdecurvelo@gmail.com",
+    phone: "5538992056463",
+    city: "Curvelo",
+    state: "MG",
+  });
+  return (result as any)[0]?.insertId ?? (result as any).insertId ?? null;
 }
 
 export async function getProductSuppliers(productId: number) {
