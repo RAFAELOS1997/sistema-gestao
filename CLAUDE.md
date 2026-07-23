@@ -50,8 +50,9 @@ protótipo.
   editar lá.
 - **⚠️ Múltiplas IAs editando o MESMO repositório:** Rafael usa mais de um
   assistente de IA nesse projeto — sessões de Claude Code (desktop, celular/
-  web) E, a partir de 2026-07-23, também o **Gemini CLI** do Google (rodando
-  local, apontado pra essa mesma pasta). Isso já causou um conflito real uma
+  web) E, a partir de 2026-07-23, também o **Antigravity CLI** do Google
+  (comando `agy`, sucessor do descontinuado "Gemini CLI" — rodando local,
+  apontado pra essa mesma pasta). Isso já causou um conflito real uma
   vez (duas sessões de Claude construindo a mesma feature ao mesmo tempo,
   uma teve que descartar o próprio trabalho). Se você é uma IA lendo isto:
   **sempre rode `git fetch && git log HEAD..origin/main` ANTES de começar
