@@ -31,7 +31,7 @@ type GeminiPart =
   | { functionCall: { name: string; args: Record<string, any> } }
   | { functionResponse: { name: string; response: Record<string, any> } };
 
-type GeminiContent = { role: "user" | "model" | "function"; parts: GeminiPart[] };
+type GeminiContent = { role: "user" | "model"; parts: GeminiPart[] };
 
 const TOOLS = [
   {
@@ -292,7 +292,7 @@ export async function runAssistantTurn(
     actionsPerformed.push({ tool: name, args: safeArgs, result });
 
     contents.push({ role: "model", parts: [functionCallPart] });
-    contents.push({ role: "function", parts: [{ functionResponse: { name, response: result } }] });
+    contents.push({ role: "user", parts: [{ functionResponse: { name, response: result } }] });
   }
 
   return {
