@@ -48,6 +48,17 @@ protótipo.
   Windows do Rafael). Existe também `D:\Downloads\toca-da-pantera-main`, que
   é uma cópia de referência mais antiga — **não é o projeto ativo**, não
   editar lá.
+- **⚠️ Múltiplas IAs editando o MESMO repositório:** Rafael usa mais de um
+  assistente de IA nesse projeto — sessões de Claude Code (desktop, celular/
+  web) E, a partir de 2026-07-23, também o **Gemini CLI** do Google (rodando
+  local, apontado pra essa mesma pasta). Isso já causou um conflito real uma
+  vez (duas sessões de Claude construindo a mesma feature ao mesmo tempo,
+  uma teve que descartar o próprio trabalho). Se você é uma IA lendo isto:
+  **sempre rode `git fetch && git log HEAD..origin/main` ANTES de começar
+  uma feature nova** (não só antes do push) pra pegar trabalho concorrente
+  cedo. Se encontrar commits recentes de estilo/padrão diferente do seu
+  (nomes de variável, comentários, convenções), é provável que sejam de
+  outra IA — leia o código antes de assumir que está quebrado ou errado.
 - **Hospedagem:** Hostinger "Web Apps" (Node.js), subdomínio
   `sistema.tocadapantera.com.br`. `tocadapantera.com.br` era um site vazio
   separado (hospedagem PHP/HTML padrão, "reservado pra futuro site de
