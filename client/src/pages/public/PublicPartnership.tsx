@@ -177,8 +177,8 @@ export default function PublicPartnership() {
             <Moon className="w-8 h-8 text-accent mx-auto" />
             <h3 className="font-semibold text-foreground">Entrega no horário da sua gira</h3>
             <p className="text-sm text-muted-foreground">
-              A Toca entrega fora do horário comercial — pra não bater com o horário de atendimento do seu
-              terreiro. Um diferencial que só a gente oferece.
+              A Toca entrega fora do horário comercial — bem no horário da sua gira, pra você receber sem
+              precisar parar o atendimento. Um diferencial que só a gente oferece.
             </p>
           </CardContent>
         </Card>

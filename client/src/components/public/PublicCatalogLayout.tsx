@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
 import { DecorativeDivider } from "@/components/DecorativeDivider";
-import { MessageCircle, MapPin, ShieldCheck, Truck, Menu, User } from "lucide-react";
+import { MessageCircle, ShieldCheck, Truck, Menu, User } from "lucide-react";
 import { WHATSAPP_LINK } from "@/lib/contact";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
@@ -31,9 +31,6 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
       <div className="bg-[#c9a961] text-[#1a1207]">
         <div className="max-w-6xl mx-auto px-4 h-8 flex items-center justify-center sm:justify-between text-[11px] sm:text-xs font-semibold">
           <div className="hidden sm:flex items-center gap-4">
-            <span className="inline-flex items-center gap-1.5">
-              <MapPin className="w-3 h-3" /> Baseada em Ribeirão Preto, SP
-            </span>
             <span className="inline-flex items-center gap-1.5">
               <Truck className="w-3 h-3" /> Entrega própria em Ribeirão Preto
             </span>
@@ -151,8 +148,8 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
           </p>
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 text-[#c9a961]" />
-              Baseada em Ribeirão Preto, SP
+              <Truck className="w-3.5 h-3.5 text-[#c9a961]" />
+              Entrega própria em Ribeirão Preto
             </span>
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-[#c9a961]" />
