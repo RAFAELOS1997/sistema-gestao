@@ -171,7 +171,7 @@ const timeAgo = (dateStr: string | Date) => {
   return `há ${diffD}d`;
 };
 
-export default function SupplierCatalog({ config }: { config?: SupplierCatalogConfig }) {
+export default function SupplierCatalog({ config, hideHeader }: { config?: SupplierCatalogConfig; hideHeader?: boolean }) {
   const cfg = config ?? ORACULO_CONFIG;
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState<string>("todas");
@@ -371,19 +371,21 @@ export default function SupplierCatalog({ config }: { config?: SupplierCatalogCo
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center gap-3">
-        <div className="h-11 w-11 rounded-xl bg-accent/15 border border-accent/30 flex items-center justify-center shrink-0">
-          <cfg.icon className="h-6 w-6 text-accent" />
+      {!hideHeader && (
+        <div className="flex items-center gap-3">
+          <div className="h-11 w-11 rounded-xl bg-accent/15 border border-accent/30 flex items-center justify-center shrink-0">
+            <cfg.icon className="h-6 w-6 text-accent" />
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">
+              {cfg.title}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {cfg.subtitle}
+            </p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground leading-tight">
-            {cfg.title}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {cfg.subtitle}
-          </p>
-        </div>
-      </div>
+      )}
 
       <Card className="bg-card border-border">
         <CardContent className="p-4 space-y-3">

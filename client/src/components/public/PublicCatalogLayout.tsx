@@ -8,8 +8,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { trpc } from "@/lib/trpc";
 
 const NAV_ITEMS = [
+  { label: "Início", path: "/loja/pedidos" },
   { label: "Pronta Entrega", path: "/loja/produtos" },
-  { label: "Fazer Pedidos", path: "/loja/pedidos" },
   { label: "Seja Parceiro", path: "/parceria" },
 ];
 
@@ -32,7 +32,7 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
         <div className="max-w-6xl mx-auto px-4 h-8 flex items-center justify-center sm:justify-between text-[11px] sm:text-xs font-semibold">
           <div className="hidden sm:flex items-center gap-4">
             <span className="inline-flex items-center gap-1.5">
-              <MapPin className="w-3 h-3" /> Loja física em Ribeirão Preto, SP
+              <MapPin className="w-3 h-3" /> Baseada em Ribeirão Preto, SP
             </span>
             <span className="inline-flex items-center gap-1.5">
               <Truck className="w-3 h-3" /> Entrega própria em Ribeirão Preto
@@ -47,7 +47,7 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
       {/* Cabeçalho principal */}
       <header className="sticky top-0 z-40 bg-background/95 backdrop-blur border-b border-[#c9a961]/20">
         <div className="max-w-6xl mx-auto px-4 h-16 sm:h-20 flex items-center justify-between gap-3">
-          <button onClick={() => goTo("/loja/produtos")} className="flex items-center gap-2.5 sm:gap-3 shrink-0 min-w-0">
+          <button onClick={() => goTo("/loja/pedidos")} className="flex items-center gap-2.5 sm:gap-3 shrink-0 min-w-0">
             <img
               src="/logo.jpeg"
               alt="Toca da Pantera"
@@ -152,7 +152,7 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
           <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <MapPin className="w-3.5 h-3.5 text-[#c9a961]" />
-              Loja física em Ribeirão Preto, SP
+              Baseada em Ribeirão Preto, SP
             </span>
             <span className="inline-flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 text-[#c9a961]" />
@@ -169,7 +169,7 @@ export default function PublicCatalogLayout({ children }: { children: React.Reac
             Fale com a gente pelo WhatsApp
           </a>
           <p className="text-xs text-muted-foreground max-w-md">
-            Por enquanto entregamos só em Ribeirão Preto (entrega própria). Retirada na loja disponível pra qualquer cidade.
+            Por enquanto entregamos só em Ribeirão Preto (entrega própria). Retirada disponível pra qualquer cidade, mediante combinação.
           </p>
         </div>
       </footer>

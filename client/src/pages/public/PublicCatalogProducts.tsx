@@ -118,7 +118,7 @@ export default function PublicCatalogProducts() {
       return;
     }
     if (shippingMethod === "envio" && !isRibeiraoPreto(address.city)) {
-      toast.error("Por enquanto só entregamos em Ribeirão Preto. Pra outras cidades, escolha retirar na loja.");
+      toast.error("Por enquanto só entregamos em Ribeirão Preto. Pra outras cidades, escolha a opção de retirada.");
       return;
     }
     checkoutMutation.mutate({
@@ -150,7 +150,7 @@ export default function PublicCatalogProducts() {
       </div>
 
       <p className="text-xs text-accent bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
-        Por enquanto entregamos só em Ribeirão Preto (entrega própria) — ou você pode retirar direto na loja.
+        Por enquanto entregamos só em Ribeirão Preto (entrega própria) — ou você pode combinar a retirada direto com a gente.
       </p>
 
       <div className="flex flex-col gap-3">

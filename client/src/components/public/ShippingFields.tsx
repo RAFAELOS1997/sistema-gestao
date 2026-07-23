@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, MapPin, Store, Truck } from "lucide-react";
+import { Loader2, MapPin, HandCoins, Truck } from "lucide-react";
 
 export type ShippingMethod = "retirada" | "envio";
 
@@ -65,8 +65,8 @@ export function ShippingMethodPicker({
         }`}
         id={`${idPrefix}-retirada`}
       >
-        <Store className="w-4 h-4" />
-        Retirar na loja
+        <HandCoins className="w-4 h-4" />
+        Retirar direto
       </button>
       <button
         type="button"

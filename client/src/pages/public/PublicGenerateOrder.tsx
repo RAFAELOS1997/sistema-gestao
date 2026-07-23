@@ -16,8 +16,14 @@ type Source = "catalogo" | "estoque";
 
 const cartKey = (source: Source, id: number) => `${source}:${id}`;
 
+// A aba "Estoque da Loja" foi removida daqui (2026-07) por ficar redundante
+// com a Pronta Entrega, que já cobre os itens de estoque — essa tela agora
+// é só o catálogo do fornecedor. `source` fica fixo em "catalogo", mas o
+// tipo/lógica de carrinho continuam aceitando "estoque" pra não quebrar
+// carrinhos antigos salvos no navegador de quem já tinha item de estoque ali.
+const source: Source = "catalogo";
+
 export default function PublicGenerateOrder() {
-  const [source, setSource] = useState<Source>("catalogo");
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("todas");
   const { cart, setQuantity, clear: clearCart } = usePublicCart();
@@ -129,7 +135,7 @@ export default function PublicGenerateOrder() {
       return;
     }
     if (shippingMethod === "envio" && !isRibeiraoPreto(address.city)) {
-      toast.error("Por enquanto só entregamos em Ribeirão Preto. Pra outras cidades, escolha retirar na loja.");
+      toast.error("Por enquanto só entregamos em Ribeirão Preto. Pra outras cidades, escolha a opção de retirada.");
       return;
     }
     createOrderMutation.mutate({
@@ -173,33 +179,16 @@ export default function PublicGenerateOrder() {
     <div className="relative isolate">
       <div className="space-y-5 sm:space-y-6 pb-24">
       <div>
-        <h1 className="text-xl sm:text-3xl font-bold text-foreground">Fazer Pedido</h1>
+        <h1 className="text-xl sm:text-3xl font-bold text-foreground">Início</h1>
         <p className="text-muted-foreground text-sm">
-          Monte seu pedido e a gente confirma com você por telefone. Pedido mínimo de R$ {(minimumCents / 100).toFixed(2)} só
-          nos itens do fornecedor — itens do estoque não têm mínimo.
+          Monte seu pedido do catálogo do fornecedor e a gente confirma com você por telefone. Pedido mínimo de
+          R$ {(minimumCents / 100).toFixed(2)}.
         </p>
       </div>
 
       <p className="text-xs text-accent bg-accent/10 border border-accent/30 rounded-lg px-3 py-2">
-        Por enquanto entregamos só em Ribeirão Preto (entrega própria) — ou você pode retirar direto na loja.
+        Por enquanto entregamos só em Ribeirão Preto (entrega própria) — ou você pode combinar a retirada direto com a gente.
       </p>
-
-      <div className="flex gap-2 border-b border-border">
-        {([
-          { key: "catalogo" as const, label: "Catálogo do Fornecedor" },
-          { key: "estoque" as const, label: "Estoque da Loja" },
-        ]).map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => { setSource(tab.key); setCategory("todas"); }}
-            className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-px ${
-              source === tab.key ? "border-accent text-accent" : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
 
       <div className="flex flex-col gap-3">
         <div className="relative">

@@ -155,7 +155,7 @@ export default function PublicOrders() {
                   )}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     {order.shippingMethod === "envio" ? <Truck className="w-3.5 h-3.5 shrink-0" /> : <Store className="w-3.5 h-3.5 shrink-0" />}
-                    {order.shippingMethod === "envio" ? formatAddress(order) ?? "Enviar (endereço não informado)" : "Retirada na loja"}
+                    {order.shippingMethod === "envio" ? formatAddress(order) ?? "Enviar (endereço não informado)" : "Retirada"}
                   </div>
                   {order.items.some((i: any) => i.source === "catalogo") && (
                     <Button size="sm" variant="outline" className="h-8 w-full" onClick={() => copyPurchaseList(order)}>

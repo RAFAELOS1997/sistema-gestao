@@ -10,7 +10,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
   useEffect(() => {
     const isStoreDomain = STORE_HOSTNAMES.includes(window.location.hostname);
-    setLocation(isStoreDomain ? "/loja/produtos" : "/dashboard");
+    setLocation(isStoreDomain ? "/loja/pedidos" : "/dashboard");
   }, [setLocation]);
   return null;
 }

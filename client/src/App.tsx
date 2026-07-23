@@ -29,8 +29,7 @@ import { PortalCartProvider } from "./contexts/PortalCartContext";
 import { PublicCartProvider } from "./contexts/PublicCartContext";
 import { ProntaEntregaCartProvider } from "./contexts/ProntaEntregaCartContext";
 import PriceReview from "./pages/PriceReview";
-import SupplierCatalog from "./pages/SupplierCatalog";
-import CrystalsCatalog from "./pages/CrystalsCatalog";
+import Oraculo from "./pages/Oraculo";
 import AuditPedido7335 from "./pages/AuditPedido7335";
 import Products from "./pages/Products";
 import Purchases from "./pages/Purchases";
@@ -85,12 +84,7 @@ function Router() {
       </Route>
       <Route path="/oraculo">
         <DashboardLayout>
-          <SupplierCatalog />
-        </DashboardLayout>
-      </Route>
-      <Route path="/sabedoria-dos-cristais">
-        <DashboardLayout>
-          <CrystalsCatalog />
+          <Oraculo />
         </DashboardLayout>
       </Route>
       <Route path="/conferencia-pedido-7335">

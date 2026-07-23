@@ -11,7 +11,7 @@ const CRYSTALS_IMPORT_SOURCES = [
   { path: "atacado", category: "pedras", label: "Atacado" },
 ];
 
-export default function CrystalsCatalog() {
+export default function CrystalsCatalog({ hideHeader }: { hideHeader?: boolean }) {
   const { data: supplierId, isLoading } = trpc.supplierCatalog.crystalsSupplierId.useQuery();
 
   if (isLoading || !supplierId) {
@@ -31,5 +31,5 @@ export default function CrystalsCatalog() {
     importSources: CRYSTALS_IMPORT_SOURCES,
   };
 
-  return <SupplierCatalog config={config} />;
+  return <SupplierCatalog config={config} hideHeader={hideHeader} />;
 }

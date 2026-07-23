@@ -3,7 +3,15 @@
 // de artigos de umbanda, aqui os dados vêm de JSON já embutido no HTML —
 // mais confiável que parsear texto/preço solto.
 
-const UA = "Mozilla/5.0 (compatible; TocaDaPanteraCatalogBot/1.0)";
+// Cabeçalhos parecidos com os de um navegador real — sites atrás de
+// Cloudflare (como este) costumam bloquear/desafiar requisições com
+// cabeçalhos claramente automatizados (só User-Agent, sem Accept etc.).
+const FETCH_HEADERS = {
+  "user-agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+  "accept-language": "pt-BR,pt;q=0.9,en;q=0.8",
+};
 const BASE = "https://www.cristaisdecurvelo.com.br/";
 
 export type CrystalsListingItem = {
@@ -55,11 +63,22 @@ export async function fetchCrystalsListingPage(
   const path = categoryPath.endsWith("/") ? categoryPath : `${categoryPath}/`;
   const url = page === 1 ? `${BASE}${path}` : `${BASE}${path}?page=${page}`;
 
-  const response = await fetch(url, { headers: { "user-agent": UA } });
-  if (!response.ok) return { items: [], hasNext: false };
+  const response = await fetch(url, { headers: FETCH_HEADERS });
+  if (!response.ok) {
+    throw new Error(`O site do fornecedor recusou o acesso (status ${response.status}) em ${url}`);
+  }
 
   const html = await response.text();
   const items = parseJsonLdItems(html);
+  // Página 1 sem NENHUM produto reconhecível é sinal de erro (bloqueio,
+  // captcha, mudança de layout) — não de categoria vazia de verdade, já
+  // que /atacado/ sempre tem produtos. Página >1 vazia é o fim normal da
+  // paginação, tratado por quem chama essa função.
+  if (page === 1 && items.length === 0) {
+    throw new Error(
+      `Não encontrei nenhum produto reconhecível em ${url} — o site pode ter bloqueado o acesso automático ou mudado a estrutura da página.`
+    );
+  }
   // O tema não expõe link de "próxima página" no HTML (é carregado por JS) —
   // segue tentando enquanto a página devolver produtos; a página vazia (0
   // itens) é o sinal de fim, tratado por quem chama essa função.
@@ -73,7 +92,7 @@ export async function fetchCrystalsListingPage(
 export async function fetchCrystalsProductStatus(
   url: string
 ): Promise<{ price: number | null; stockStatus: "disponivel" | "indisponivel" | "desconhecido" }> {
-  const response = await fetch(url, { headers: { "user-agent": UA } });
+  const response = await fetch(url, { headers: FETCH_HEADERS });
   if (!response.ok) {
     throw new Error(`Não foi possível acessar a página do fornecedor (status ${response.status})`);
   }

@@ -23,6 +23,7 @@ import {
   Wallet,
   MapPin,
   Rocket,
+  Moon,
 } from "lucide-react";
 
 const TIERS = [
@@ -150,7 +151,7 @@ export default function PublicPartnership() {
       <DecorativeDivider className="max-w-sm mx-auto" />
 
       {/* Como funciona */}
-      <div className="grid sm:grid-cols-3 gap-4 max-w-4xl mx-auto">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 max-w-5xl mx-auto">
         <Card>
           <CardContent className="pt-6 text-center space-y-2">
             <TrendingUp className="w-8 h-8 text-accent mx-auto" />
@@ -168,6 +169,16 @@ export default function PublicPartnership() {
             <p className="text-sm text-muted-foreground">
               Sem precisar ir até a loja: acesse o catálogo, monte seu pedido com o preço do seu plano já aplicado,
               e a gente confirma com você.
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6 text-center space-y-2">
+            <Moon className="w-8 h-8 text-accent mx-auto" />
+            <h3 className="font-semibold text-foreground">Entrega no horário da sua gira</h3>
+            <p className="text-sm text-muted-foreground">
+              A Toca entrega fora do horário comercial — pra não bater com o horário de atendimento do seu
+              terreiro. Um diferencial que só a gente oferece.
             </p>
           </CardContent>
         </Card>
@@ -347,8 +358,8 @@ export default function PublicPartnership() {
               ))}
             </ul>
             <p className="text-xs text-muted-foreground pt-1 border-t border-border">
-              Conta tudo que você pedir pela tela "Fazer Pedidos" — tanto o catálogo do fornecedor quanto o
-              estoque da loja. Compras feitas direto no balcão não entram nessa conta.
+              Conta tudo que você pedir pela tela "Gerar Pedidos" do Portal do Parceiro — tanto o catálogo do
+              fornecedor quanto o estoque da loja. Compras feitas direto no balcão não entram nessa conta.
             </p>
           </CardContent>
         </Card>
