@@ -106,12 +106,20 @@ type DashboardLayoutContentProps = {
 function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
-  const { state, toggleSidebar } = useSidebar();
+  const { state, toggleSidebar, setOpen, setOpenMobile } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
   const activeMenuItem = menuItems.find((item) => item.path === location);
   const isMobile = useIsMobile();
+
+  // Toda vez que uma tela é escolhida, recolhe o menu sozinho (no PC vira
+  // só os ícones; no celular fecha a gaveta) — libera espaço de tela.
+  const handleNavigate = (path: string) => {
+    setLocation(path);
+    if (isMobile) setOpenMobile(false);
+    else setOpen(false);
+  };
 
   useEffect(() => {
     if (isCollapsed) setIsResizing(false);
@@ -175,7 +183,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton
                       isActive={isActive}
-                      onClick={() => setLocation(item.path)}
+                      onClick={() => handleNavigate(item.path)}
                       tooltip={item.label}
                       className={`h-10 transition-all font-normal rounded-lg ${
                         isActive

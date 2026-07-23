@@ -94,6 +94,7 @@ function DialogContent({
   children,
   showCloseButton = true,
   onEscapeKeyDown,
+  onCloseAutoFocus,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean;
@@ -128,6 +129,14 @@ function DialogContent({
           className
         )}
         onEscapeKeyDown={handleEscapeKeyDown}
+        onCloseAutoFocus={(e) => {
+          // Sem isso, ao fechar (ex.: depois de salvar um formulário), o
+          // Radix devolve o foco pro botão que abriu o diálogo — e o
+          // navegador rola a página até esse botão, o que na prática
+          // parecia "a tela voltar pro topo" depois de editar algo.
+          e.preventDefault();
+          onCloseAutoFocus?.(e);
+        }}
         {...props}
       >
         {children}

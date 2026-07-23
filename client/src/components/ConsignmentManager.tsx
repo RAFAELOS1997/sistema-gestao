@@ -1,12 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PackagePlus, Check, X } from "lucide-react";
+import { PackagePlus, Check, X, Search, PackageSearch } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 
@@ -17,6 +16,7 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [showSettled, setShowSettled] = useState(false);
   const [form, setForm] = useState({ productId: "", quantity: "1", unitPrice: "", notes: "" });
+  const [productSearch, setProductSearch] = useState("");
   const [qtyDrafts, setQtyDrafts] = useState<Record<number, string>>({});
   const [confirmingRequestId, setConfirmingRequestId] = useState<number | null>(null);
   const [priceDrafts, setPriceDrafts] = useState<Record<number, string>>({});
@@ -34,6 +34,13 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
     { terreiroId, productId: selectedProductId ?? 0 },
     { enabled: !!selectedProductId }
   );
+
+  const inStockProducts = useMemo(() => products.filter((p) => p.currentStock > 0), [products]);
+  const filteredProducts = useMemo(() => {
+    const term = productSearch.trim().toLowerCase();
+    if (!term) return inStockProducts;
+    return inStockProducts.filter((p) => p.name.toLowerCase().includes(term));
+  }, [inStockProducts, productSearch]);
 
   // Preenche o preço combinado com a sugestão (específico > plano > loja)
   // quando o produto muda — mas deixa o admin ajustar à vontade.
@@ -57,6 +64,7 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
       }
       setIsDialogOpen(false);
       setForm({ productId: "", quantity: "1", unitPrice: "", notes: "" });
+      setProductSearch("");
       invalidate();
     },
     onError: (error) => toast.error(`Erro: ${error.message}`),
@@ -247,37 +255,68 @@ export default function ConsignmentManager({ terreiroId }: { terreiroId: number 
           <Button variant="outline" size="sm" onClick={() => setShowSettled((v) => !v)}>
             {showSettled ? "Só pendentes" : "Ver histórico"}
           </Button>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog
+            open={isDialogOpen}
+            onOpenChange={(open) => {
+              setIsDialogOpen(open);
+              if (!open) setProductSearch("");
+            }}
+          >
             <DialogTrigger asChild>
               <Button size="sm" className="bg-accent text-accent-foreground hover:bg-accent/90">
                 <PackagePlus className="w-4 h-4 mr-2" />
                 Deixar itens
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Deixar itens no terreiro</DialogTitle>
                 <DialogDescription>O estoque da loja é baixado na hora — volta se houver devolução</DialogDescription>
               </DialogHeader>
               <form onSubmit={handleCreate} className="space-y-4">
                 <div>
-                  <Label htmlFor="consignProduct">Produto</Label>
-                  <Select value={form.productId} onValueChange={(v) => v && setForm({ ...form, productId: v })}>
-                    <SelectTrigger id="consignProduct">
-                      <SelectValue placeholder="Escolha o produto">
-                        {selectedProductId ? products.find((p) => p.id === selectedProductId)?.name : undefined}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {products
-                        .filter((p) => p.currentStock > 0)
-                        .map((p) => (
-                          <SelectItem key={p.id} value={String(p.id)}>
-                            {p.name} (estoque: {p.currentStock})
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
+                  <Label>Produto</Label>
+                  <div className="relative mt-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      value={productSearch}
+                      onChange={(e) => setProductSearch(e.target.value)}
+                      placeholder="Buscar produto..."
+                      className="pl-9 h-10"
+                    />
+                  </div>
+                  {filteredProducts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-6">Nenhum produto encontrado.</p>
+                  ) : (
+                    <div className="space-y-1.5 max-h-56 overflow-y-auto mt-2 pr-1">
+                      {filteredProducts.map((p) => {
+                        const selected = selectedProductId === p.id;
+                        return (
+                          <button
+                            type="button"
+                            key={p.id}
+                            onClick={() => setForm({ ...form, productId: String(p.id) })}
+                            className={`w-full flex items-center gap-2 p-2 rounded border text-left transition-colors ${
+                              selected ? "border-accent bg-accent/10" : "border-border bg-background hover:bg-accent/5"
+                            }`}
+                          >
+                            <div className="w-10 h-10 rounded bg-muted shrink-0 overflow-hidden flex items-center justify-center">
+                              {p.imageUrl ? (
+                                <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" />
+                              ) : (
+                                <PackageSearch className="w-4 h-4 text-muted-foreground opacity-40" />
+                              )}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-foreground truncate">{p.name}</p>
+                              <p className="text-[11px] text-muted-foreground">Estoque: {p.currentStock}</p>
+                            </div>
+                            {selected && <Check className="w-4 h-4 text-accent shrink-0" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>

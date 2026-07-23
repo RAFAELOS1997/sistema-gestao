@@ -9,8 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { PackagePlus, Minus, Plus, Package, ArrowLeft } from "lucide-react";
+import { PackagePlus, Minus, Plus, Package, ArrowLeft, Search, PackageSearch } from "lucide-react";
 import { ComodatoContract } from "@/components/portal/ComodatoContract";
+import { ZoomableImage } from "@/components/ZoomableImage";
 
 const STATUS_LABELS: Record<string, string> = {
   pendente: "Aguardando entrega",
@@ -34,6 +35,7 @@ export default function PortalConsignments() {
   const [cart, setCart] = useState<Record<number, number>>({});
   const [notes, setNotes] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [productSearch, setProductSearch] = useState("");
 
   const utils = trpc.useUtils();
   const meQuery = trpc.portal.me.useQuery();
@@ -51,7 +53,14 @@ export default function PortalConsignments() {
     setNotes("");
     setTermsAccepted(false);
     setDialogStep("pick");
+    setProductSearch("");
   };
+
+  const filteredStock = useMemo(() => {
+    const term = productSearch.trim().toLowerCase();
+    if (!term) return stock;
+    return stock.filter((p) => p.name.toLowerCase().includes(term));
+  }, [stock, productSearch]);
 
   const createRequestMutation = trpc.portal.consignmentRequests.create.useMutation({
     onSuccess: () => {
@@ -134,7 +143,7 @@ export default function PortalConsignments() {
                 Solicitar Produtos
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogContent className="w-[calc(100vw-2rem)] sm:max-w-lg max-h-[85vh] overflow-y-auto">
               {dialogStep === "pick" ? (
                 <>
                   <DialogHeader>
@@ -150,38 +159,60 @@ export default function PortalConsignments() {
                   ) : stock.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-6">Nenhum produto disponível no momento.</p>
                   ) : (
-                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-                      {stock.map((product) => {
-                        const qty = cart[product.id] ?? 0;
-                        return (
-                          <div key={product.id} className="flex items-center justify-between gap-2 p-2 bg-background rounded border border-border">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-sm text-foreground truncate">{product.name}</p>
-                              <p className="text-[11px] text-muted-foreground">Estoque: {product.currentStock}</p>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <button
-                                type="button"
-                                onClick={() => setQuantity(product.id, qty - 1)}
-                                disabled={qty === 0}
-                                className="p-1.5 rounded bg-background border border-border text-accent disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/10"
-                              >
-                                <Minus className="w-3.5 h-3.5" />
-                              </button>
-                              <span className="w-6 text-center text-sm font-semibold text-foreground">{qty}</span>
-                              <button
-                                type="button"
-                                onClick={() => setQuantity(product.id, qty + 1)}
-                                disabled={qty >= product.currentStock}
-                                className="p-1.5 rounded bg-accent text-accent-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/90"
-                              >
-                                <Plus className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                    <>
+                      <div className="relative">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          value={productSearch}
+                          onChange={(e) => setProductSearch(e.target.value)}
+                          placeholder="Buscar produto..."
+                          className="pl-9 h-10"
+                        />
+                      </div>
+                      {filteredStock.length === 0 ? (
+                        <p className="text-sm text-muted-foreground text-center py-6">Nenhum produto encontrado.</p>
+                      ) : (
+                        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+                          {filteredStock.map((product) => {
+                            const qty = cart[product.id] ?? 0;
+                            return (
+                              <div key={product.id} className="flex items-center gap-2 p-2 bg-background rounded border border-border">
+                                <div className="w-11 h-11 rounded bg-muted shrink-0 overflow-hidden flex items-center justify-center">
+                                  {product.imageUrl ? (
+                                    <ZoomableImage src={product.imageUrl} alt={product.name} className="w-full h-full" />
+                                  ) : (
+                                    <PackageSearch className="w-5 h-5 text-muted-foreground opacity-40" />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm text-foreground truncate">{product.name}</p>
+                                  <p className="text-[11px] text-muted-foreground">Estoque: {product.currentStock}</p>
+                                </div>
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => setQuantity(product.id, qty - 1)}
+                                    disabled={qty === 0}
+                                    className="p-1.5 rounded bg-background border border-border text-accent disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/10"
+                                  >
+                                    <Minus className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span className="w-6 text-center text-sm font-semibold text-foreground">{qty}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setQuantity(product.id, qty + 1)}
+                                    disabled={qty >= product.currentStock}
+                                    className="p-1.5 rounded bg-accent text-accent-foreground disabled:opacity-30 disabled:cursor-not-allowed hover:bg-accent/90"
+                                  >
+                                    <Plus className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <div>
