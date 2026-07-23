@@ -2068,6 +2068,10 @@ export async function fulfillConsignmentRequest(
 // Itens disponíveis do catálogo do fornecedor pro parceiro montar o pedido —
 // só as colunas necessárias pro preço, NUNCA supplierId/sourceUrl/sourceSlug
 // (o parceiro não pode saber quem é nem onde fica o fornecedor).
+// Só o Fornecedor 1 (Atacado de Umbanda) aparece pro cliente/parceiro pedir
+// — os itens da Cristais de Curvelo (Fornecedor 2) são pacotes de atacado
+// (ex. "1000 unidades", "20kg") pensados pra Rafael revisar e cadastrar no
+// próprio estoque aos poucos, não pra ir direto pro cliente final pedir.
 export async function listAvailableSupplierCatalogForOrders() {
   const db = await getDb();
   if (!db) return [];
@@ -2081,7 +2085,7 @@ export async function listAvailableSupplierCatalogForOrders() {
       suggestedSalePrice: supplierCatalog.suggestedSalePrice,
     })
     .from(supplierCatalog)
-    .where(eq(supplierCatalog.stockStatus, "disponivel"))
+    .where(and(eq(supplierCatalog.stockStatus, "disponivel"), eq(supplierCatalog.sourceKey, "atacado_umbanda")))
     .orderBy(supplierCatalog.name);
 }
 
